@@ -216,3 +216,33 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# =========================
+# Project-specific
+# =========================
+
+# Downloaded / processed energy data
+data/*
+data/raw/*
+data/processed/*
+
+# Keep directory structure in Git if using .gitkeep
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Trained model artefacts
+*.pkl
+*.joblib
+
+# Optional generated model/output folders
+models/
+artifacts/
+
+# Local PostgreSQL data directory
+# Only relevant if you use a Docker bind mount / local data folder
+postgres-data/
+pgdata/
+
+# OS files
+.DS_Store
+Thumbs.db
