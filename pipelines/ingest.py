@@ -1,4 +1,9 @@
 from core.api.elexon import fetch_drm, save_raw
+from core.db import (
+    count_margin_rows,
+    initialise_database,
+    upsert_margin_rows,
+)
 from core.normalise import normalise_elexon_drm
 
 
@@ -13,6 +18,11 @@ def ingest_drm():
     rows = normalise_elexon_drm(raw["data"])
 
     print(f"Normalised rows: {len(rows)}")
+
+    initialise_database()
+    upsert_margin_rows(rows)
+
+    print(f"Rows currently in database: {count_margin_rows()}")
 
 
 if __name__ == "__main__":
