@@ -15,19 +15,35 @@ def fetch_drm(from_dt: str, to_dt: str) -> dict:
         "format": "json",
     }
 
-    response = requests.get(
-        url,
-        params=params,
-        timeout=(5, 30),
-    )
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=(5, 30),
+        )
 
-    response.raise_for_status()
+        response.raise_for_status()
+
+    except requests.HTTPError as exc:
+        raise RuntimeError(
+            f"Elexon request failed "
+            f"({response.status_code}): {response.text}"
+        ) from exc
+
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"Could not reach Elexon API: {exc}"
+        ) from exc
+
     return response.json()
 
 
 def save_raw(data: dict, filename: str) -> None:
     path = Path("data/raw/elexon")
     path.mkdir(parents=True, exist_ok=True)
+
+    filename = filename if filename.endswith(".json") else f"{filename}.json"
+    filename = filename.replace(":", "-")
 
     with open(path / filename, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=2)

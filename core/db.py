@@ -46,3 +46,13 @@ def count_margin_rows():
         ).fetchone()
 
     return result[0]
+
+def count_target_rows():
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM elexon_margin
+            WHERE forecast_horizon_hours = 1
+            """
+        ).fetchone()[0]
