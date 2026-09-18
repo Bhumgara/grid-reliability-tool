@@ -19,3 +19,18 @@ def normalise_elexon_drm(records):
         }
         for row in records
     ]
+
+def normalise_elexon_demand(records):
+    return [
+        {
+            "event_time_utc": parse_utc(row["startTime"]),
+            "published_at_utc": parse_utc(row["publishTime"]),
+            "settlement_date": date.fromisoformat(
+                row["settlementDate"]
+            ),
+            "settlement_period": row["settlementPeriod"],
+            "demand_mw": row["demand"],
+            "source": "elexon",
+        }
+        for row in records
+    ]

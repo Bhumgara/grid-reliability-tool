@@ -13,3 +13,18 @@ CREATE TABLE IF NOT EXISTS elexon_margin (
         forecast_horizon_hours
     )
 );
+
+CREATE TABLE IF NOT EXISTS elexon_demand (
+    event_time_utc TEXT NOT NULL,
+    published_at_utc TEXT NOT NULL,
+    settlement_date TEXT NOT NULL,
+    settlement_period INTEGER NOT NULL,
+    demand_mw REAL NOT NULL,
+    source TEXT NOT NULL,
+
+    PRIMARY KEY (
+        event_time_utc,
+        published_at_utc
+    )
+);
+

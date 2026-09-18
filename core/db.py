@@ -39,6 +39,27 @@ def upsert_margin_rows(rows):
         conn.executemany(query, values)
 
 
+def upsert_demand_rows(rows):
+    query = Path(
+        "sql/ingestion/upsert_demand.sql"
+    ).read_text(encoding="utf-8")
+
+    values = [
+        (
+            row["event_time_utc"].isoformat(),
+            row["published_at_utc"].isoformat(),
+            row["settlement_date"].isoformat(),
+            row["settlement_period"],
+            row["demand_mw"],
+            row["source"],
+        )
+        for row in rows
+    ]
+
+    with get_connection() as conn:
+        conn.executemany(query, values)
+
+
 def count_margin_rows():
     with get_connection() as conn:
         result = conn.execute(
@@ -46,6 +67,14 @@ def count_margin_rows():
         ).fetchone()
 
     return result[0]
+
+
+def count_demand_rows():
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM elexon_demand"
+        ).fetchone()[0]
+
 
 def count_target_rows():
     with get_connection() as conn:

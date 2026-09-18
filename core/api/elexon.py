@@ -37,6 +37,37 @@ def fetch_drm(from_dt: str, to_dt: str) -> dict:
 
     return response.json()
 
+def fetch_demand(from_dt: str, to_dt: str) -> dict:
+    url = f"{BASE_URL}/datasets/INDO"
+
+    params = {
+        "publishDateTimeFrom": from_dt,
+        "publishDateTimeTo": to_dt,
+        "format": "json",
+    }
+
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=(5, 30),
+        )
+
+        response.raise_for_status()
+
+    except requests.HTTPError as exc:
+        raise RuntimeError(
+            f"Elexon demand request failed "
+            f"({response.status_code}): {response.text}"
+        ) from exc
+
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"Could not reach Elexon API: {exc}"
+        ) from exc
+
+    return response.json()
+
 
 def save_raw(data: dict, filename: str) -> None:
     path = Path("data/raw/elexon")
