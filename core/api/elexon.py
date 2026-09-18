@@ -78,17 +78,3 @@ def save_raw(data: dict, filename: str) -> None:
 
     with open(path / filename, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=2)
-
-
-if __name__ == "__main__":
-    data = fetch_drm(
-        "2026-09-15T00:00Z",
-        "2026-09-16T00:00Z",
-    )
-
-    print(f"Rows returned: {len(data.get('data', []))}")
-
-    if data.get("data"):
-        print(data["data"][0])
-
-    save_raw(data, "drm_test.json")
