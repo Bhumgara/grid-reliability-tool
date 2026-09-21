@@ -32,21 +32,21 @@ from core.db import (
 
 from datetime import datetime, timedelta
 
-def ingest_drm(from_dt: str, to_dt: str):
+def ingest_lolpdrm(from_dt: str, to_dt: str):
     raw = fetch_lolpdrm(from_dt, to_dt)
 
     rows = normalise_elexon_lolpdrm(raw["data"])
 
-    save_raw(raw, f"drm_{from_dt}_{to_dt}.json")
+    save_raw(raw, f"lolpdrm_{from_dt}_{to_dt}.json")
 
     initialise_database()
     upsert_margin_lolpdrm_rows(rows)
 
-    print(f"Fetched: {len(rows)}")
-    print(f"Database total: {count_margin_lolpdrm_rows()}")
+    print(f"LOLPDRM Fetched: {len(rows)}")
+    print(f"LOLPDRM rows total: {count_margin_lolpdrm_rows()}")
     print(f"Target rows: {count_target_rows()}")
 
-def ingest_demand(from_dt: str, to_dt: str):
+def ingest_indo(from_dt: str, to_dt: str):
     raw = fetch_indo(from_dt, to_dt)
 
     safe_from = from_dt.replace(":", "-")
@@ -54,18 +54,18 @@ def ingest_demand(from_dt: str, to_dt: str):
 
     save_raw(
         raw,
-        f"demand_{safe_from}_{safe_to}.json",
+        f"indo_demand_{safe_from}_{safe_to}.json",
     )
 
     rows = normalise_elexon_indo(raw["data"])
 
-    print(f"Demand fetched: {len(rows)}")
+    print(f"INDO fetched: {len(rows)}")
 
     initialise_database()
     upsert_demand_indo_rows(rows)
 
     print(
-        f"Demand rows in database: "
+        f"INDO rows in database: "
         f"{count_demand_indo_rows()}"
     )
 
@@ -128,7 +128,7 @@ def ingest_neso_generation_mix(
     )
 
 
-def backfill_drm(from_dt: str, to_dt: str):
+def backfill_lolpdrm(from_dt: str, to_dt: str):
     start = datetime.fromisoformat(
         from_dt.replace("Z", "+00:00")
     )
@@ -149,13 +149,13 @@ def backfill_drm(from_dt: str, to_dt: str):
 
         print(f"Ingesting {chunk_from} -> {chunk_to}")
 
-        ingest_drm(chunk_from, chunk_to)
+        ingest_lolpdrm(chunk_from, chunk_to)
 
         # Boundary overlap is okay because your upsert
         # prevents duplicate rows.
         current = chunk_end
 
-def backfill_demand(from_dt: str, to_dt: str):
+def backfill_indo(from_dt: str, to_dt: str):
     start = datetime.fromisoformat(
         from_dt.replace("Z", "+00:00")
     )
@@ -176,34 +176,11 @@ def backfill_demand(from_dt: str, to_dt: str):
 
         print(f"Ingesting {chunk_from} -> {chunk_to}")
 
-        ingest_demand(chunk_from, chunk_to)
+        ingest_indo(chunk_from, chunk_to)
 
         # Boundary overlap is okay because your upsert
         # prevents duplicate rows.
         current = chunk_end
-
-
-
-# if __name__ == "__main__":
-#     ingest_drm(
-#         "2026-09-08T00:00Z",
-#         "2026-09-16T00:00Z",
-#         )
-
-#     ingest_demand(
-#         "2026-09-08T00:00Z",
-#         "2026-09-16T00:00Z",
-
-#     )
-#     backfill_drm(
-#         "2026-01-01T00:00Z",
-#         "2026-09-16T00:00Z",
-#     )
-
-#     backfill_demand(
-#         "2026-01-01T00:00Z",
-#         "2026-09-16T00:00Z",
-#     )
 
 if __name__ == "__main__":
     ingest_neso_generation_mix(

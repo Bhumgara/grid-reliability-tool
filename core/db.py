@@ -135,7 +135,7 @@ def count_target_rows():
         return conn.execute(
             """
             SELECT COUNT(*)
-            FROM elexon_margin
+            FROM elexon_margin_lolpdrm
             WHERE forecast_horizon_hours = 1
             """
         ).fetchone()[0]

@@ -57,7 +57,7 @@ def fetch_indo(from_dt: str, to_dt: str) -> dict:
 
     except requests.HTTPError as exc:
         raise RuntimeError(
-            f"Elexon demand request failed "
+            f"Elexon INDO demand request failed "
             f"({response.status_code}): {response.text}"
         ) from exc
 
