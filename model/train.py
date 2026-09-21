@@ -4,10 +4,14 @@ import pandas as pd
 from sklearn.ensemble import (
     GradientBoostingRegressor,
     RandomForestRegressor,
+    HistGradientBoostingRegressor,
 )
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.linear_model import LinearRegression, Ridge
 from xgboost import XGBRegressor
+
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from core.config import DB_PATH
 
@@ -108,12 +112,21 @@ def build_models() -> dict:
     return {
         "Linear Regression": LinearRegression(),
 
+        "Ridge Regression": make_pipeline(
+            StandardScaler(),
+            Ridge(alpha=1.0),
+        ),
+
         "Random Forest": RandomForestRegressor(
             random_state=42,
             n_jobs=-1,
         ),
 
         "Gradient Boosting": GradientBoostingRegressor(
+            random_state=42,
+        ),
+
+        "HistGradientBoosting": HistGradientBoostingRegressor(
             random_state=42,
         ),
 
