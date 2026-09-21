@@ -59,6 +59,27 @@ def upsert_demand_indo_rows(rows):
     with get_connection() as conn:
         conn.executemany(query, values)
 
+def upsert_generation_fuelhh_rows(rows):
+    query = Path(
+        "sql/ingestion/upsert_elexon_generation_fuelhh.sql"
+    ).read_text(encoding="utf-8")
+
+    values = [
+        (
+            row["event_time_utc"].isoformat(),
+            row["published_at_utc"].isoformat(),
+            row["settlement_date"].isoformat(),
+            row["settlement_period"],
+            row["fuel_type"],
+            row["generation_mw"],
+            row["source"],
+        )
+        for row in rows
+    ]
+
+    with get_connection() as conn:
+        conn.executemany(query, values)
+
 def upsert_neso_generation_mix_rows(rows):
     query = Path(
         "sql/ingestion/upsert_neso_generation_mix.sql"
@@ -96,9 +117,16 @@ def count_margin_lolpdrm_rows():
 
 
 def count_demand_indo_rows():
-            "SELECT COUNT(*) FROM elexon_demand_indo"
     with get_connection() as conn:
         return conn.execute(
+            "SELECT COUNT(*) FROM elexon_demand_indo"
+        ).fetchone()[0]
+
+def count_generation_fuelhh_rows():
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) "
+            "FROM elexon_generation_fuelhh"
         ).fetchone()[0]
 
 

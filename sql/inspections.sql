@@ -1,5 +1,5 @@
 -- ============================================================
--- DRM INSPECTIONS
+-- ELEXON LOLPDRM DRM INSPECTIONS
 -- ============================================================
 
 -- Horizon counts for the selected historical window
@@ -50,7 +50,7 @@ WHERE forecast_horizon_hours = 1
 
 
 -- ============================================================
--- DEMAND INSPECTIONS
+-- ELEXON INDO DEMAND INSPECTIONS
 -- ============================================================
 
 -- Total demand rows
@@ -84,7 +84,7 @@ LIMIT 10;
 
 
 -- ============================================================
--- DRM ↔ DEMAND JOIN INSPECTIONS
+-- LOLPDRM ↔ INDO JOIN INSPECTIONS
 -- ============================================================
 
 -- Sample joined rows
@@ -133,6 +133,52 @@ FROM elexon_margin_lolpdrm AS m
 LEFT JOIN elexon_demand_indo AS d
     ON m.event_time_utc = d.event_time_utc
 WHERE m.forecast_horizon_hours = 1;
+
+-- ============================================================
+-- ELEXON FUELHH GENERATION INSPECTIONS
+-- ============================================================
+
+SELECT
+    COUNT(*) AS generation_rows,
+    COUNT(DISTINCT event_time_utc) AS unique_generation_times
+FROM elexon_generation_fuelhh;
+
+
+-- Which fuel types are actually present?
+SELECT
+    fuel_type,
+    COUNT(*) AS row_count
+FROM elexon_generation_fuelhh
+GROUP BY fuel_type
+ORDER BY fuel_type;
+
+
+-- Number of fuels reported for each half-hour
+SELECT
+    event_time_utc,
+    COUNT(DISTINCT fuel_type) AS fuel_count
+FROM elexon_generation_fuelhh
+GROUP BY event_time_utc
+ORDER BY event_time_utc
+LIMIT 20;
+
+
+-- Null generation values
+SELECT
+    COUNT(*) AS null_generation_values
+FROM elexon_generation_fuelhh
+WHERE generation_mw IS NULL;
+
+
+-- Sample
+SELECT
+    event_time_utc,
+    fuel_type,
+    generation_mw,
+    published_at_utc
+FROM elexon_generation_fuelhh
+ORDER BY event_time_utc, fuel_type
+LIMIT 40;
 
 -- ============================================================
 -- NESO GENERATION MIX INSPECTIONS

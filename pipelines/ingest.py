@@ -1,6 +1,7 @@
 from core.api.elexon import (
     fetch_lolpdrm,
     fetch_indo,
+    fetch_fuelhh,
     save_raw,
 )
 
@@ -12,6 +13,7 @@ from core.api.neso import (
 from core.normalise import (
     normalise_elexon_lolpdrm,
     normalise_elexon_indo,
+    normalise_elexon_fuelhh,
     normalise_neso_generation_mix,
 )
 
@@ -19,10 +21,12 @@ from core.db import (
     count_margin_lolpdrm_rows,
     count_demand_indo_rows,
     count_target_rows,
+    count_generation_fuelhh_rows,
     count_neso_generation_mix_rows,
     initialise_database,
     upsert_margin_lolpdrm_rows,
     upsert_demand_indo_rows,
+    upsert_generation_fuelhh_rows,
     upsert_neso_generation_mix_rows,
 )
 
@@ -63,6 +67,33 @@ def ingest_demand(from_dt: str, to_dt: str):
     print(
         f"Demand rows in database: "
         f"{count_demand_indo_rows()}"
+    )
+
+def ingest_fuelhh(from_dt: str, to_dt: str):
+    raw = fetch_fuelhh(from_dt, to_dt)
+
+    safe_from = from_dt.replace(":", "-")
+    safe_to = to_dt.replace(":", "-")
+
+    save_raw(
+        raw,
+        f"fuelhh_{safe_from}_{safe_to}.json",
+    )
+
+    rows = normalise_elexon_fuelhh(
+        raw["data"]
+    )
+
+    print(
+        f"FUELHH generation rows fetched: {len(rows)}"
+    )
+
+    initialise_database()
+    upsert_generation_fuelhh_rows(rows)
+
+    print(
+        "FUELHH rows in database: "
+        f"{count_generation_fuelhh_rows()}"
     )
 
 def ingest_neso_generation_mix(
@@ -150,6 +181,8 @@ def backfill_demand(from_dt: str, to_dt: str):
         # Boundary overlap is okay because your upsert
         # prevents duplicate rows.
         current = chunk_end
+
+
 
 # if __name__ == "__main__":
 #     ingest_drm(

@@ -28,6 +28,22 @@ CREATE TABLE IF NOT EXISTS elexon_demand_indo (
     )
 );
 
+CREATE TABLE IF NOT EXISTS elexon_generation_fuelhh (
+    event_time_utc TEXT NOT NULL,
+    published_at_utc TEXT NOT NULL,
+    settlement_date TEXT NOT NULL,
+    settlement_period INTEGER NOT NULL,
+    fuel_type TEXT NOT NULL,
+    generation_mw REAL NOT NULL,
+    source TEXT NOT NULL,
+
+    PRIMARY KEY (
+        event_time_utc,
+        fuel_type,
+        published_at_utc
+    )
+);
+
 CREATE TABLE IF NOT EXISTS neso_generation_mix (
     interval_start_utc TEXT NOT NULL,
     interval_end_utc TEXT NOT NULL,
