@@ -246,3 +246,7 @@ pgdata/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Git diff files
+review-changes.patch
+review-stat.txt
