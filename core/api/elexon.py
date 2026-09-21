@@ -1,0 +1,112 @@
+from pathlib import Path
+import json
+import requests
+
+
+BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1"
+
+
+def fetch_lolpdrm(from_dt: str, to_dt: str) -> dict:
+    url = f"{BASE_URL}/forecast/system/loss-of-load"
+
+    params = {
+        "from": from_dt,
+        "to": to_dt,
+        "format": "json",
+    }
+
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=(5, 30),
+        )
+
+        response.raise_for_status()
+
+    except requests.HTTPError as exc:
+        raise RuntimeError(
+            f"Elexon request failed "
+            f"({response.status_code}): {response.text}"
+        ) from exc
+
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"Could not reach Elexon API: {exc}"
+        ) from exc
+
+    return response.json()
+
+def fetch_indo(from_dt: str, to_dt: str) -> dict:
+    url = f"{BASE_URL}/datasets/INDO"
+
+    params = {
+        "publishDateTimeFrom": from_dt,
+        "publishDateTimeTo": to_dt,
+        "format": "json",
+    }
+
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=(5, 30),
+        )
+
+        response.raise_for_status()
+
+    except requests.HTTPError as exc:
+        raise RuntimeError(
+            f"Elexon INDO demand request failed "
+            f"({response.status_code}): {response.text}"
+        ) from exc
+
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"Could not reach Elexon API: {exc}"
+        ) from exc
+
+    return response.json()
+
+
+def fetch_fuelhh(from_dt: str, to_dt: str) -> dict:
+    url = f"{BASE_URL}/datasets/FUELHH"
+
+    params = {
+        "publishDateTimeFrom": from_dt,
+        "publishDateTimeTo": to_dt,
+        "format": "json",
+    }
+
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=(5, 30),
+        )
+
+        response.raise_for_status()
+
+    except requests.HTTPError as exc:
+        raise RuntimeError(
+            f"Elexon FUELHH request failed "
+            f"({response.status_code}): {response.text}"
+        ) from exc
+
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"Could not reach Elexon API: {exc}"
+        ) from exc
+
+    return response.json()
+
+
+def save_raw(data: dict, filename: str) -> None:
+    path = Path("data/raw/elexon")
+    path.mkdir(parents=True, exist_ok=True)
+
+    filename = filename if filename.endswith(".json") else f"{filename}.json"
+    filename = filename.replace(":", "-")
+
+    with open(path / filename, "w", encoding="utf-8") as file:
+        json.dump(data, file, indent=2)
