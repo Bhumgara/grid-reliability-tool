@@ -18,7 +18,7 @@ def initialise_database():
 
 def upsert_margin_rows(rows):
     query = Path(
-        "sql/ingestion/upsert_margin.sql"
+        "sql/ingestion/upsert_elexon_margin_lolpdrm.sql"
     ).read_text(encoding="utf-8")
 
     values = [
@@ -41,7 +41,7 @@ def upsert_margin_rows(rows):
 
 def upsert_demand_rows(rows):
     query = Path(
-        "sql/ingestion/upsert_demand.sql"
+        "sql/ingestion/upsert_elexon_demand_indo.sql"
     ).read_text(encoding="utf-8")
 
     values = [
