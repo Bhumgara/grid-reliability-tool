@@ -181,9 +181,3 @@ def backfill_indo(from_dt: str, to_dt: str):
         # Boundary overlap is okay because your upsert
         # prevents duplicate rows.
         current = chunk_end
-
-if __name__ == "__main__":
-    ingest_neso_generation_mix(
-        "2026-09-01T00:00Z",
-        "2026-09-02T00:00Z",
-    )
