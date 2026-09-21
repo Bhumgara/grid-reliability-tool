@@ -285,6 +285,41 @@ def validate_dataset(df: pd.DataFrame) -> None:
                 f"Future event used in {column}."
             )
 
+def save_dataset_to_db(df: pd.DataFrame) -> None:
+    db_df = df.copy()
+
+    # SQLite has no native timezone-aware datetime type,
+    # so store datetimes consistently as ISO-8601 strings.
+    datetime_columns = [
+        column
+        for column in db_df.columns
+        if pd.api.types.is_datetime64_any_dtype(db_df[column])
+    ]
+
+    for column in datetime_columns:
+        db_df[column] = db_df[column].apply(
+            lambda value: (
+                value.isoformat()
+                if pd.notna(value)
+                else None
+            )
+        )
+
+    with sqlite3.connect(str(DB_PATH)) as conn:
+        db_df.to_sql(
+            "model_dataset",
+            conn,
+            if_exists="replace",
+            index=False,
+        )
+
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS
+                idx_model_dataset_target_time
+            ON model_dataset (target_time_utc);
+            """
+        )
 
 def build_model_dataset() -> pd.DataFrame:
     with sqlite3.connect(str(DB_PATH)) as conn:
@@ -346,6 +381,8 @@ def build_model_dataset() -> pd.DataFrame:
         "target_time_utc"
     ).reset_index(drop=True)
 
+    save_dataset_to_db(df)
+
     OUTPUT_PATH.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -379,10 +416,7 @@ def build_model_dataset() -> pd.DataFrame:
         f"{df['fuel_published_at_utc'].notna().mean():.2%}",
     )
 
+    print(f"Saved to database table: model_dataset")
     print(f"Saved to {OUTPUT_PATH}")
 
     return df
-
-
-if __name__ == "__main__":
-    build_model_dataset()
