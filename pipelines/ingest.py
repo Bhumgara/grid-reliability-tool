@@ -58,7 +58,7 @@ def parse_backfill_datetime(value: str, field_name: str) -> datetime:
 def validate_backfill_range(
     from_dt: str,
     to_dt: str,
-) -> tuple[datetime, datetime]:
+) -> tuple[str, str]:
     start = parse_backfill_datetime(
         from_dt,
         "from_dt",
@@ -73,6 +73,9 @@ def validate_backfill_range(
             f"from_dt must be earlier than to_dt. "
             f"Received {from_dt!r} -> {to_dt!r}."
         )
+
+    start = start.isoformat().replace("+00:00", "Z")
+    end = end.isoformat().replace("+00:00", "Z")
 
     return start, end
 
@@ -341,24 +344,3 @@ def backfill_neso_generation_mix(
         )
 
         current = chunk_end
-
-if __name__ == "__main__":
-    backfill_lolpdrm(
-        from_dt="2026-09-01T00:00Z",
-        to_dt="2026-09-21T00:00Z",
-    )
-
-    backfill_indo(
-        from_dt="2026-09-01T00:00Z",
-        to_dt="2026-09-21T00:00Z",
-    )
-
-    backfill_neso_generation_mix(
-        from_dt="2026-09-01T00:00Z",
-        to_dt="2026-09-21T00:00Z",
-    )
-
-    backfill_fuelhh(
-        from_dt="2026-09-01T00:00Z",
-        to_dt="2026-09-21T00:00Z",
-    )
