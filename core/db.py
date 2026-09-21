@@ -59,6 +59,32 @@ def upsert_demand_rows(rows):
     with get_connection() as conn:
         conn.executemany(query, values)
 
+def upsert_neso_generation_mix_rows(rows):
+    query = Path(
+        "sql/ingestion/upsert_neso_generation_mix.sql"
+    ).read_text(encoding="utf-8")
+
+    values = [
+        (
+            row["interval_start_utc"].isoformat(),
+            row["interval_end_utc"].isoformat(),
+            row["biomass_pct"],
+            row["coal_pct"],
+            row["imports_pct"],
+            row["gas_pct"],
+            row["nuclear_pct"],
+            row["other_pct"],
+            row["hydro_pct"],
+            row["solar_pct"],
+            row["wind_pct"],
+            row["source"],
+        )
+        for row in rows
+    ]
+
+    with get_connection() as conn:
+        conn.executemany(query, values)
+
 
 def count_margin_rows():
     with get_connection() as conn:
@@ -84,4 +110,10 @@ def count_target_rows():
             FROM elexon_margin
             WHERE forecast_horizon_hours = 1
             """
+        ).fetchone()[0]
+
+def count_neso_generation_mix_rows():
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM neso_generation_mix"
         ).fetchone()[0]

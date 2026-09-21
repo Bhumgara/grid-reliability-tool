@@ -133,3 +133,49 @@ FROM elexon_margin AS m
 LEFT JOIN elexon_demand AS d
     ON m.event_time_utc = d.event_time_utc
 WHERE m.forecast_horizon_hours = 1;
+
+-- ============================================================
+-- NESO GENERATION MIX INSPECTIONS
+-- ============================================================
+
+SELECT
+    COUNT(*) AS generation_mix_rows,
+    COUNT(DISTINCT interval_start_utc) AS unique_generation_times
+FROM neso_generation_mix;
+
+
+SELECT
+    MIN(interval_start_utc) AS earliest_generation_time,
+    MAX(interval_start_utc) AS latest_generation_time
+FROM neso_generation_mix;
+
+
+SELECT
+    interval_start_utc,
+    wind_pct,
+    solar_pct,
+    gas_pct,
+    nuclear_pct
+FROM neso_generation_mix
+ORDER BY interval_start_utc
+LIMIT 10;
+
+
+-- Check percentage totals
+SELECT
+    interval_start_utc,
+    ROUND(
+        biomass_pct +
+        coal_pct +
+        imports_pct +
+        gas_pct +
+        nuclear_pct +
+        other_pct +
+        hydro_pct +
+        solar_pct +
+        wind_pct,
+        1
+    ) AS total_pct
+FROM neso_generation_mix
+ORDER BY interval_start_utc
+LIMIT 20;

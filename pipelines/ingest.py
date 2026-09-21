@@ -4,18 +4,26 @@ from core.api.elexon import (
     save_raw,
 )
 
+from core.api.neso import (
+    fetch_generation_mix,
+    save_raw_neso,
+)
+
 from core.normalise import (
     normalise_elexon_drm,
     normalise_elexon_demand,
+    normalise_neso_generation_mix,
 )
 
 from core.db import (
     count_margin_rows,
     count_demand_rows,
     count_target_rows,
+    count_neso_generation_mix_rows,
     initialise_database,
     upsert_margin_rows,
     upsert_demand_rows,
+    upsert_neso_generation_mix_rows,
 )
 
 from datetime import datetime, timedelta
@@ -55,6 +63,37 @@ def ingest_demand(from_dt: str, to_dt: str):
     print(
         f"Demand rows in database: "
         f"{count_demand_rows()}"
+    )
+
+def ingest_neso_generation_mix(
+    from_dt: str,
+    to_dt: str,
+):
+    raw = fetch_generation_mix(from_dt, to_dt)
+
+    safe_from = from_dt.replace(":", "-")
+    safe_to = to_dt.replace(":", "-")
+
+    save_raw_neso(
+        raw,
+        f"generation_mix_{safe_from}_{safe_to}.json",
+    )
+
+    rows = normalise_neso_generation_mix(
+        raw["data"]
+    )
+
+    print(
+        f"NESO generation mix fetched: {len(rows)}"
+    )
+
+    initialise_database()
+
+    upsert_neso_generation_mix_rows(rows)
+
+    print(
+        "NESO generation mix rows in database: "
+        f"{count_neso_generation_mix_rows()}"
     )
 
 
@@ -112,23 +151,29 @@ def backfill_demand(from_dt: str, to_dt: str):
         # prevents duplicate rows.
         current = chunk_end
 
+# if __name__ == "__main__":
+#     ingest_drm(
+#         "2026-09-08T00:00Z",
+#         "2026-09-16T00:00Z",
+#         )
+
+#     ingest_demand(
+#         "2026-09-08T00:00Z",
+#         "2026-09-16T00:00Z",
+
+#     )
+#     backfill_drm(
+#         "2026-01-01T00:00Z",
+#         "2026-09-16T00:00Z",
+#     )
+
+#     backfill_demand(
+#         "2026-01-01T00:00Z",
+#         "2026-09-16T00:00Z",
+#     )
+
 if __name__ == "__main__":
-    ingest_drm(
-        "2026-09-08T00:00Z",
-        "2026-09-16T00:00Z",
-        )
-
-    ingest_demand(
-        "2026-09-08T00:00Z",
-        "2026-09-16T00:00Z",
-
-    )
-    backfill_drm(
-        "2026-01-01T00:00Z",
-        "2026-09-16T00:00Z",
-    )
-
-    backfill_demand(
-        "2026-01-01T00:00Z",
-        "2026-09-16T00:00Z",
+    ingest_neso_generation_mix(
+        "2026-09-01T00:00Z",
+        "2026-09-02T00:00Z",
     )

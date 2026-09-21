@@ -17,7 +17,7 @@ def fetch_generation_mix(from_dt: str, to_dt: str) -> dict:
     response.raise_for_status()
     return response.json()
 
-def save_raw(data: dict, filename: str) -> None:
+def save_raw_neso(data: dict, filename: str) -> None:
     path = Path("data/raw/neso")
     path.mkdir(parents=True, exist_ok=True)
 
@@ -40,6 +40,6 @@ if __name__ == "__main__":
     if data.get("data"):
         print(data["data"][0])
 
-    save_raw(data, "neso_test.json")
+    save_raw_neso(data, "neso_test.json")
 
     

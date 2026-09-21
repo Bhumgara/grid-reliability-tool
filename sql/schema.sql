@@ -28,3 +28,19 @@ CREATE TABLE IF NOT EXISTS elexon_demand (
     )
 );
 
+CREATE TABLE IF NOT EXISTS neso_generation_mix (
+    interval_start_utc TEXT NOT NULL,
+    interval_end_utc TEXT NOT NULL,
+    biomass_pct REAL,
+    coal_pct REAL,
+    imports_pct REAL,
+    gas_pct REAL,
+    nuclear_pct REAL,
+    other_pct REAL,
+    hydro_pct REAL,
+    solar_pct REAL,
+    wind_pct REAL,
+    source TEXT NOT NULL,
+
+    PRIMARY KEY (interval_start_utc)
+);
