@@ -16,7 +16,7 @@ def initialise_database():
         conn.executescript(schema)
 
 
-def upsert_margin_rows(rows):
+def upsert_margin_lolpdrm_rows(rows):
     query = Path(
         "sql/ingestion/upsert_elexon_margin_lolpdrm.sql"
     ).read_text(encoding="utf-8")
@@ -39,7 +39,7 @@ def upsert_margin_rows(rows):
         conn.executemany(query, values)
 
 
-def upsert_demand_rows(rows):
+def upsert_demand_indo_rows(rows):
     query = Path(
         "sql/ingestion/upsert_elexon_demand_indo.sql"
     ).read_text(encoding="utf-8")
@@ -86,19 +86,19 @@ def upsert_neso_generation_mix_rows(rows):
         conn.executemany(query, values)
 
 
-def count_margin_rows():
+def count_margin_lolpdrm_rows():
     with get_connection() as conn:
         result = conn.execute(
-            "SELECT COUNT(*) FROM elexon_margin"
+            "SELECT COUNT(*) FROM elexon_margin_lolpdrm"
         ).fetchone()
 
     return result[0]
 
 
-def count_demand_rows():
+def count_demand_indo_rows():
+            "SELECT COUNT(*) FROM elexon_demand_indo"
     with get_connection() as conn:
         return conn.execute(
-            "SELECT COUNT(*) FROM elexon_demand"
         ).fetchone()[0]
 
 

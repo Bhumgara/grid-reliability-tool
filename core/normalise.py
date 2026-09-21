@@ -5,7 +5,7 @@ def parse_utc(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def normalise_elexon_drm(records):
+def normalise_elexon_lolpdrm(records):
     return [
         {
             "event_time_utc": parse_utc(row["startTime"]),
@@ -20,7 +20,8 @@ def normalise_elexon_drm(records):
         for row in records
     ]
 
-def normalise_elexon_demand(records):
+
+def normalise_elexon_indo(records):
     return [
         {
             "event_time_utc": parse_utc(row["startTime"]),

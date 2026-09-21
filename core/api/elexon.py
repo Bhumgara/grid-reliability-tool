@@ -6,7 +6,7 @@ import requests
 BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1"
 
 
-def fetch_drm(from_dt: str, to_dt: str) -> dict:
+def fetch_lolpdrm(from_dt: str, to_dt: str) -> dict:
     url = f"{BASE_URL}/forecast/system/loss-of-load"
 
     params = {
@@ -37,7 +37,7 @@ def fetch_drm(from_dt: str, to_dt: str) -> dict:
 
     return response.json()
 
-def fetch_demand(from_dt: str, to_dt: str) -> dict:
+def fetch_indo(from_dt: str, to_dt: str) -> dict:
     url = f"{BASE_URL}/datasets/INDO"
 
     params = {

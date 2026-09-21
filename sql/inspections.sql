@@ -6,7 +6,7 @@
 SELECT
     forecast_horizon_hours,
     COUNT(*) AS row_count
-FROM elexon_margin
+FROM elexon_margin_lolpdrm
 WHERE event_time_utc >= '2026-09-01T00:00:00+00:00'
   AND event_time_utc <= '2026-09-08T00:00:00+00:00'
 GROUP BY forecast_horizon_hours
@@ -16,7 +16,7 @@ ORDER BY forecast_horizon_hours;
 -- Number of unique DRM timestamps
 SELECT
     COUNT(DISTINCT event_time_utc) AS unique_margin_times
-FROM elexon_margin
+FROM elexon_margin_lolpdrm
 WHERE event_time_utc >= '2026-09-01T00:00:00+00:00'
   AND event_time_utc <= '2026-09-08T00:00:00+00:00';
 
@@ -26,7 +26,7 @@ SELECT
     event_time_utc,
     COUNT(*) AS horizon_count,
     GROUP_CONCAT(forecast_horizon_hours) AS horizons
-FROM elexon_margin
+FROM elexon_margin_lolpdrm
 WHERE event_time_utc >= '2026-09-01T00:00:00+00:00'
   AND event_time_utc <= '2026-09-08T00:00:00+00:00'
 GROUP BY event_time_utc
@@ -37,14 +37,14 @@ ORDER BY event_time_utc;
 -- Total number of 1-hour DRM target rows
 SELECT
     COUNT(*) AS target_rows
-FROM elexon_margin
+FROM elexon_margin_lolpdrm
 WHERE forecast_horizon_hours = 1;
 
 
 -- Null DRM target values
 SELECT
     COUNT(*) AS null_margin_values
-FROM elexon_margin
+FROM elexon_margin_lolpdrm
 WHERE forecast_horizon_hours = 1
   AND derated_margin_mw IS NULL;
 
@@ -56,20 +56,20 @@ WHERE forecast_horizon_hours = 1
 -- Total demand rows
 SELECT
     COUNT(*) AS demand_rows
-FROM elexon_demand;
+FROM elexon_demand_indo;
 
 
 -- Demand date range
 SELECT
     MIN(event_time_utc) AS earliest_demand_time,
     MAX(event_time_utc) AS latest_demand_time
-FROM elexon_demand;
+FROM elexon_demand_indo;
 
 
 -- Null demand values
 SELECT
     COUNT(*) AS null_demand_values
-FROM elexon_demand
+FROM elexon_demand_indo
 WHERE demand_mw IS NULL;
 
 
@@ -78,7 +78,7 @@ SELECT
     event_time_utc,
     demand_mw,
     published_at_utc
-FROM elexon_demand
+FROM elexon_demand_indo
 ORDER BY event_time_utc
 LIMIT 10;
 
@@ -93,8 +93,8 @@ SELECT
     m.derated_margin_mw,
     d.demand_mw,
     d.published_at_utc AS demand_published_at_utc
-FROM elexon_margin AS m
-JOIN elexon_demand AS d
+FROM elexon_margin_lolpdrm AS m
+JOIN elexon_demand_indo AS d
     ON m.event_time_utc = d.event_time_utc
 WHERE m.forecast_horizon_hours = 1
 ORDER BY m.event_time_utc
@@ -104,8 +104,8 @@ LIMIT 20;
 -- Count successful timestamp matches
 SELECT
     COUNT(*) AS joined_rows
-FROM elexon_margin AS m
-JOIN elexon_demand AS d
+FROM elexon_margin_lolpdrm AS m
+JOIN elexon_demand_indo AS d
     ON m.event_time_utc = d.event_time_utc
 WHERE m.forecast_horizon_hours = 1;
 
@@ -113,8 +113,8 @@ WHERE m.forecast_horizon_hours = 1;
 -- Find DRM target rows with no matching demand row
 SELECT
     m.event_time_utc
-FROM elexon_margin AS m
-LEFT JOIN elexon_demand AS d
+FROM elexon_margin_lolpdrm AS m
+LEFT JOIN elexon_demand_indo AS d
     ON m.event_time_utc = d.event_time_utc
 WHERE m.forecast_horizon_hours = 1
   AND d.event_time_utc IS NULL
@@ -129,8 +129,8 @@ SELECT
         100.0 * COUNT(d.event_time_utc) / COUNT(*),
         3
     ) AS match_percentage
-FROM elexon_margin AS m
-LEFT JOIN elexon_demand AS d
+FROM elexon_margin_lolpdrm AS m
+LEFT JOIN elexon_demand_indo AS d
     ON m.event_time_utc = d.event_time_utc
 WHERE m.forecast_horizon_hours = 1;
 

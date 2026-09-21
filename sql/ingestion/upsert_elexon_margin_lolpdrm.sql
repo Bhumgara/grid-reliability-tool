@@ -1,4 +1,4 @@
-INSERT INTO elexon_margin (
+INSERT INTO elexon_margin_lolpdrm (
     event_time_utc,
     published_at_utc,
     forecast_horizon_hours,

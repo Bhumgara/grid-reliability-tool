@@ -1,4 +1,4 @@
-INSERT INTO elexon_demand (
+INSERT INTO elexon_demand_indo (
     event_time_utc,
     published_at_utc,
     settlement_date,

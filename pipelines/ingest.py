@@ -1,6 +1,6 @@
 from core.api.elexon import (
-    fetch_drm,
-    fetch_demand,
+    fetch_lolpdrm,
+    fetch_indo,
     save_raw,
 )
 
@@ -10,40 +10,40 @@ from core.api.neso import (
 )
 
 from core.normalise import (
-    normalise_elexon_drm,
-    normalise_elexon_demand,
+    normalise_elexon_lolpdrm,
+    normalise_elexon_indo,
     normalise_neso_generation_mix,
 )
 
 from core.db import (
-    count_margin_rows,
-    count_demand_rows,
+    count_margin_lolpdrm_rows,
+    count_demand_indo_rows,
     count_target_rows,
     count_neso_generation_mix_rows,
     initialise_database,
-    upsert_margin_rows,
-    upsert_demand_rows,
+    upsert_margin_lolpdrm_rows,
+    upsert_demand_indo_rows,
     upsert_neso_generation_mix_rows,
 )
 
 from datetime import datetime, timedelta
 
 def ingest_drm(from_dt: str, to_dt: str):
-    raw = fetch_drm(from_dt, to_dt)
+    raw = fetch_lolpdrm(from_dt, to_dt)
 
-    rows = normalise_elexon_drm(raw["data"])
+    rows = normalise_elexon_lolpdrm(raw["data"])
 
     save_raw(raw, f"drm_{from_dt}_{to_dt}.json")
 
     initialise_database()
-    upsert_margin_rows(rows)
+    upsert_margin_lolpdrm_rows(rows)
 
     print(f"Fetched: {len(rows)}")
-    print(f"Database total: {count_margin_rows()}")
+    print(f"Database total: {count_margin_lolpdrm_rows()}")
     print(f"Target rows: {count_target_rows()}")
 
 def ingest_demand(from_dt: str, to_dt: str):
-    raw = fetch_demand(from_dt, to_dt)
+    raw = fetch_indo(from_dt, to_dt)
 
     safe_from = from_dt.replace(":", "-")
     safe_to = to_dt.replace(":", "-")
@@ -53,16 +53,16 @@ def ingest_demand(from_dt: str, to_dt: str):
         f"demand_{safe_from}_{safe_to}.json",
     )
 
-    rows = normalise_elexon_demand(raw["data"])
+    rows = normalise_elexon_indo(raw["data"])
 
     print(f"Demand fetched: {len(rows)}")
 
     initialise_database()
-    upsert_demand_rows(rows)
+    upsert_demand_indo_rows(rows)
 
     print(
         f"Demand rows in database: "
-        f"{count_demand_rows()}"
+        f"{count_demand_indo_rows()}"
     )
 
 def ingest_neso_generation_mix(

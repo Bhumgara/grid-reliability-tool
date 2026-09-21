@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS elexon_margin (
+CREATE TABLE IF NOT EXISTS elexon_margin_lolpdrm (
     event_time_utc TEXT NOT NULL,
     published_at_utc TEXT NOT NULL,
     forecast_horizon_hours INTEGER NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS elexon_margin (
     )
 );
 
-CREATE TABLE IF NOT EXISTS elexon_demand (
+CREATE TABLE IF NOT EXISTS elexon_demand_indo (
     event_time_utc TEXT NOT NULL,
     published_at_utc TEXT NOT NULL,
     settlement_date TEXT NOT NULL,
