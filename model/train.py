@@ -20,12 +20,36 @@ VALIDATION_START = pd.Timestamp("2025-10-01T00:00:00Z")
 TEST_START = pd.Timestamp("2026-01-01T00:00:00Z")
 
 FEATURE_COLUMNS = [
+    # historical DRM
     "baseline_drm_yesterday_mw",
+    "drm_48h_ago_mw",
+    "drm_168h_ago_mw",
+    "latest_drm_mw",
+
+    # current grid state
     "demand_mw",
     "wind_mw",
     "ccgt_mw",
     "nuclear_mw",
     "biomass_mw",
+
+    # rolling state
+    "demand_mean_10",
+    "wind_mean_10",
+    "ccgt_mean_10",
+    "nuclear_mean_10",
+    "biomass_mean_10",
+    "drm_mean_10",
+
+    # deviations from recent state
+    "demand_delta_10",
+    "wind_delta_10",
+    "ccgt_delta_10",
+    "nuclear_delta_10",
+    "biomass_delta_10",
+    "drm_delta_10",
+
+    # target calendar
     "target_hour_sin",
     "target_hour_cos",
     "target_dow_sin",
