@@ -146,25 +146,6 @@ def build_models() -> dict:
             Ridge(alpha=1.0),
         ),
 
-        "Random Forest": RandomForestRegressor(
-            random_state=42,
-            n_jobs=-1,
-        ),
-
-        "Gradient Boosting": GradientBoostingRegressor(
-            random_state=42,
-        ),
-
-        "HistGradientBoosting": HistGradientBoostingRegressor(
-            random_state=42,
-        ),
-
-        "XGBoost": XGBRegressor(
-            random_state=42,
-            n_jobs=-1,
-            objective="reg:squarederror",
-        ),
-
         "Lasso Regression": make_pipeline(
             StandardScaler(),
             Lasso(
