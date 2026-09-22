@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 
 
-def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
+def add_calendar_features(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
     local_time = df["target_time_utc"].dt.tz_convert(
         "Europe/London"
     )
@@ -15,6 +17,7 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
     df["target_hour_sin"] = np.sin(
         2 * np.pi * minute_of_day / (24 * 60)
     )
+    
     df["target_hour_cos"] = np.cos(
         2 * np.pi * minute_of_day / (24 * 60)
     )
@@ -24,6 +27,7 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
     df["target_dow_sin"] = np.sin(
         2 * np.pi * day_of_week / 7
     )
+
     df["target_dow_cos"] = np.cos(
         2 * np.pi * day_of_week / 7
     )
@@ -33,11 +37,13 @@ def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
     df["target_month_sin"] = np.sin(
         2 * np.pi * month / 12
     )
+
     df["target_month_cos"] = np.cos(
         2 * np.pi * month / 12
     )
 
     return df
+
 
 def build_demand_features(
     demand: pd.DataFrame,
@@ -47,7 +53,10 @@ def build_demand_features(
         "demand_published_at_utc"
     ).copy()
 
-    df["demand_mean_10"] = (
+    mean_column = f"demand_mean_{window}"
+    delta_column = f"demand_delta_{window}"
+
+    df[mean_column] = (
         df["demand_mw"]
         .rolling(
             window=window,
@@ -56,12 +65,13 @@ def build_demand_features(
         .mean()
     )
 
-    df["demand_delta_10"] = (
+    df[delta_column] = (
         df["demand_mw"]
-        - df["demand_mean_10"]
+        - df[mean_column]
     )
 
     return df
+
 
 def build_fuel_features(
     fuel: pd.DataFrame,
@@ -77,12 +87,16 @@ def build_fuel_features(
         "nuclear",
         "biomass",
     ]:
-        value_col = f"{fuel_name}_mw"
-        mean_col = f"{fuel_name}_mean_10"
-        delta_col = f"{fuel_name}_delta_10"
+        value_column = f"{fuel_name}_mw"
+        mean_column = (
+            f"{fuel_name}_mean_{window}"
+        )
+        delta_column = (
+            f"{fuel_name}_delta_{window}"
+        )
 
-        df[mean_col] = (
-            df[value_col]
+        df[mean_column] = (
+            df[value_column]
             .rolling(
                 window=window,
                 min_periods=window,
@@ -90,12 +104,13 @@ def build_fuel_features(
             .mean()
         )
 
-        df[delta_col] = (
-            df[value_col]
-            - df[mean_col]
+        df[delta_column] = (
+            df[value_column]
+            - df[mean_column]
         )
 
     return df
+
 
 def build_margin_features(
     margin: pd.DataFrame,
@@ -103,8 +118,8 @@ def build_margin_features(
 ) -> pd.DataFrame:
     df = margin.copy()
 
-    # Historical DRM features should use the same 1-hour
-    # horizon series that we use as the modelling target.
+    # Use the same 1-hour DRM series as the
+    # historical modelling target.
     if "forecast_horizon_hours" in df.columns:
         df = df[
             df["forecast_horizon_hours"] == 1
@@ -116,9 +131,12 @@ def build_margin_features(
 
     df = df.rename(
         columns={
-            "event_time_utc": "margin_event_time_utc",
-            "published_at_utc": "margin_published_at_utc",
-            "derated_margin_mw": "latest_drm_mw",
+            "event_time_utc":
+                "margin_event_time_utc",
+            "published_at_utc":
+                "margin_published_at_utc",
+            "derated_margin_mw":
+                "latest_drm_mw",
         }
     )
 
@@ -148,3 +166,84 @@ def build_margin_features(
             delta_column,
         ]
     ]
+
+
+def add_drm_lag_features(
+    df: pd.DataFrame,
+    targets: pd.DataFrame,
+) -> pd.DataFrame:
+    result = df.copy()
+
+    history = targets[
+        [
+            "target_time_utc",
+            "target_published_at_utc",
+            "target_drm_mw",
+        ]
+    ].copy()
+
+    for hours in [48, 168]:
+        lagged = history.copy()
+
+        # Shift historical target timestamps forward,
+        # allowing them to join to the target for which
+        # they represent a lag.
+        lagged["target_time_utc"] = (
+            lagged["target_time_utc"]
+            + pd.Timedelta(hours=hours)
+        )
+
+        value_column = (
+            f"drm_{hours}h_ago_mw"
+        )
+
+        published_column = (
+            f"drm_{hours}h_published_at_utc"
+        )
+
+        lagged = lagged.rename(
+            columns={
+                "target_drm_mw":
+                    value_column,
+                "target_published_at_utc":
+                    published_column,
+            }
+        )
+
+        lagged = lagged[
+            [
+                "target_time_utc",
+                value_column,
+                published_column,
+            ]
+        ]
+
+        result = result.merge(
+            lagged,
+            how="left",
+            on="target_time_utc",
+            validate="one_to_one",
+        )
+
+        # Defensive leakage check: even a historical
+        # lag may only be used if it had been published
+        # by this row's forecast origin.
+        unavailable = (
+            result[published_column].notna()
+            & (
+                result[published_column]
+                > result["forecast_origin_utc"]
+            )
+        )
+
+        result.loc[
+            unavailable,
+            value_column,
+        ] = np.nan
+
+        result.loc[
+            unavailable,
+            published_column,
+        ] = pd.NaT
+
+    return result
