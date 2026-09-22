@@ -139,11 +139,10 @@ def evaluate(
 
 def build_models() -> dict:
     alpha_values = [
-        0.01,
-        0.1,
-        1.0,
-        10.0,
+        30.0,
         100.0,
+        300.0,
+        1000.0,
     ]
 
     models = {
@@ -164,7 +163,7 @@ def build_models() -> dict:
             StandardScaler(),
             Lasso(
                 alpha=alpha,
-                max_iter=10_000,
+                max_iter=100_000,
             ),
         )
 
