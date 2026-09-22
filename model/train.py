@@ -14,7 +14,7 @@ from sklearn.linear_model import (
 )
 from xgboost import XGBRegressor
 
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
@@ -137,31 +137,15 @@ def evaluate(
     }
 
 
-def build_models() -> dict:
-    alpha_values = [
-        150.0,
-        200.0,
-        250.0,
-        300.0,
-        350.0,
-        400.0,
-        450.0,
-        500.0,
-        600.0,
-    ]
+def build_model() -> Pipeline:
 
-    models = {}
-
-    for alpha in alpha_values:
-        models[
-            f"Ridge alpha={alpha}"
-        ] = make_pipeline(
+    model = make_pipeline(
             StandardScaler(),
-            Ridge(alpha=alpha),
+            Ridge(alpha=350),
         )
 
 
-    return models
+    return model
 
 
 def main() -> None:
@@ -207,31 +191,28 @@ def main() -> None:
         }
     ]
 
-    models = build_models()
+    model = build_model()
 
-    for name, model in models.items():
-        print(f"Training {name}...")
+    model.fit(
+        X_train,
+        y_train,
+    )
 
-        model.fit(
-            X_train,
-            y_train,
-        )
+    predictions = model.predict(
+        X_validation
+    )
 
-        predictions = model.predict(
-            X_validation
-        )
+    metrics = evaluate(
+        y_validation,
+        predictions,
+    )
 
-        metrics = evaluate(
-            y_validation,
-            predictions,
-        )
-
-        results.append(
-            {
-                "model": name,
-                **metrics,
-            }
-        )
+    results.append(
+        {
+            "model": "final model",
+            **metrics,
+        }
+    )
 
     results_df = pd.DataFrame(results)
 
