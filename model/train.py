@@ -139,15 +139,18 @@ def evaluate(
 
 def build_models() -> dict:
     alpha_values = [
-        30.0,
-        100.0,
+        150.0,
+        200.0,
+        250.0,
         300.0,
-        1000.0,
+        350.0,
+        400.0,
+        450.0,
+        500.0,
+        600.0,
     ]
 
-    models = {
-        "Linear Regression": LinearRegression(),
-    }
+    models = {}
 
     for alpha in alpha_values:
         models[
@@ -157,15 +160,6 @@ def build_models() -> dict:
             Ridge(alpha=alpha),
         )
 
-        models[
-            f"Lasso alpha={alpha}"
-        ] = make_pipeline(
-            StandardScaler(),
-            Lasso(
-                alpha=alpha,
-                max_iter=100_000,
-            ),
-        )
 
     return models
 
