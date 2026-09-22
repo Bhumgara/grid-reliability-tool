@@ -6,7 +6,12 @@ from sklearn.ensemble import (
     RandomForestRegressor,
     HistGradientBoostingRegressor,
 )
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import (
+    ElasticNet,
+    Lasso,
+    LinearRegression,
+    Ridge,
+)
 from xgboost import XGBRegressor
 
 from sklearn.pipeline import make_pipeline
@@ -158,6 +163,23 @@ def build_models() -> dict:
             random_state=42,
             n_jobs=-1,
             objective="reg:squarederror",
+        ),
+
+        "Lasso Regression": make_pipeline(
+            StandardScaler(),
+            Lasso(
+                alpha=1.0,
+                max_iter=10_000,
+            ),
+        ),
+
+        "ElasticNet Regression": make_pipeline(
+            StandardScaler(),
+            ElasticNet(
+                alpha=1.0,
+                l1_ratio=0.5,
+                max_iter=10_000,
+            ),
         ),
     }
 
