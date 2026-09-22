@@ -138,22 +138,37 @@ def evaluate(
 
 
 def build_models() -> dict:
-    return {
+    alpha_values = [
+        0.01,
+        0.1,
+        1.0,
+        10.0,
+        100.0,
+    ]
+
+    models = {
         "Linear Regression": LinearRegression(),
+    }
 
-        "Ridge Regression": make_pipeline(
+    for alpha in alpha_values:
+        models[
+            f"Ridge alpha={alpha}"
+        ] = make_pipeline(
             StandardScaler(),
-            Ridge(alpha=1.0),
-        ),
+            Ridge(alpha=alpha),
+        )
 
-        "Lasso Regression": make_pipeline(
+        models[
+            f"Lasso alpha={alpha}"
+        ] = make_pipeline(
             StandardScaler(),
             Lasso(
-                alpha=1.0,
+                alpha=alpha,
                 max_iter=10_000,
             ),
-        ),
-    }
+        )
+
+    return models
 
 
 def main() -> None:
