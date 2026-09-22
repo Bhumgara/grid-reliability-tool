@@ -153,15 +153,6 @@ def build_models() -> dict:
                 max_iter=10_000,
             ),
         ),
-
-        "ElasticNet Regression": make_pipeline(
-            StandardScaler(),
-            ElasticNet(
-                alpha=1.0,
-                l1_ratio=0.5,
-                max_iter=10_000,
-            ),
-        ),
     }
 
 
