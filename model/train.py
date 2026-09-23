@@ -20,6 +20,11 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from core.config import DB_PATH
 
+from model.evaluate import (
+    evaluate_predictions,
+    inspect_validation_errors,
+)
+
 
 VALIDATION_START = pd.Timestamp("2025-10-01T00:00:00Z")
 TEST_START = pd.Timestamp("2026-01-01T00:00:00Z")
@@ -117,26 +122,6 @@ def chronological_split(
     return train, validation, test
 
 
-def evaluate(
-    y_true,
-    y_pred,
-) -> dict[str, float]:
-    mae = mean_absolute_error(
-        y_true,
-        y_pred,
-    )
-
-    rmse = mean_squared_error(
-        y_true,
-        y_pred,
-    ) ** 0.5
-
-    return {
-        "mae_mw": mae,
-        "rmse_mw": rmse,
-    }
-
-
 def build_model() -> Pipeline:
 
     model = make_pipeline(
@@ -179,10 +164,10 @@ def main() -> None:
         BASELINE_COLUMN
     ]
 
-    baseline_metrics = evaluate(
-        y_validation,
-        baseline_predictions,
-    )
+    baseline_metrics = evaluate_predictions(
+            y_validation,
+            baseline_predictions,
+        )
 
     results = [
         {
@@ -202,8 +187,13 @@ def main() -> None:
         X_validation
     )
 
-    metrics = evaluate(
+    metrics = evaluate_predictions(
         y_validation,
+        predictions,
+    )
+
+    inspect_validation_errors(
+        validation,
         predictions,
     )
 
