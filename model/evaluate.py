@@ -106,6 +106,36 @@ def inspect_tight_periods(
         tight["baseline_drm_yesterday_mw"],
     )
 
+    actual_tight = (
+        results["target_drm_mw"]
+        <= threshold
+    )
+
+    predicted_tight = (
+        results["predicted_drm_mw"]
+        <= threshold
+    )
+
+    missed_tight = (
+        actual_tight
+        & ~predicted_tight
+    )
+
+    print(
+        "Tight periods detected:",
+        f"{(actual_tight & predicted_tight).sum():,}"
+    )
+
+    print(
+        "Tight periods missed:",
+        f"{missed_tight.sum():,}"
+    )
+
+    print(
+        "Tight-period detection rate:",
+        f"{(actual_tight & predicted_tight).sum() / actual_tight.sum():.2%}"
+    )
+
     print()
     print("Lowest 10% DRM periods")
 
