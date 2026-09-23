@@ -1,3 +1,4 @@
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -35,8 +36,8 @@ def describe_margin_percentile(
 
 def render_forecast_hero(
     forecast: dict | None,
+    margin: pd.DataFrame,
     margin_history: pd.Series,
-    latest_margin_mw: float,
 ) -> None:
     st.markdown(
         "## 24-hour-ahead forecast"
@@ -44,28 +45,34 @@ def render_forecast_hero(
 
     if forecast is None:
         st.info(
-            "Forecast generation is not connected yet. "
-            "The saved Ridge model will be wired into "
-            "this panel next."
+            "Forecast generation is not connected yet."
         )
-
         return
 
     predicted_drm_mw = float(
         forecast["predicted_drm_mw"]
     )
 
+    forecast_origin = pd.Timestamp(
+        forecast["forecast_origin_utc"]
+    )
+
     target_time = pd.Timestamp(
         forecast["target_time_utc"]
     )
 
-    if target_time.tzinfo is None:
-        target_time = target_time.tz_localize(
-            "UTC"
+    if forecast_origin.tzinfo is None:
+        forecast_origin = (
+            forecast_origin.tz_localize("UTC")
         )
 
-    target_local = target_time.tz_convert(
-        "Europe/London"
+    if target_time.tzinfo is None:
+        target_time = (
+            target_time.tz_localize("UTC")
+        )
+
+    latest_margin_mw = float(
+        margin.iloc[-1]["derated_margin_mw"]
     )
 
     percentile = calculate_margin_percentile(
@@ -77,94 +84,194 @@ def render_forecast_hero(
         percentile
     )
 
-    difference_mw = (
+    change_mw = (
         predicted_drm_mw
         - latest_margin_mw
     )
 
-    marker_position = min(
-        max(percentile, 1),
-        99,
+    # ----------------------------------------------
+    # Headline metrics
+    # ----------------------------------------------
+
+    forecast_col, position_col, change_col = (
+        st.columns([2, 1, 1])
     )
 
-    st.markdown(
-        f"""
-        <div class="forecast-card">
+    forecast_col.metric(
+        "Predicted de-rated margin",
+        f"{predicted_drm_mw / 1000:.1f} GW",
+    )
 
-            <div class="forecast-top">
+    position_col.metric(
+        "Historical position",
+        f"{percentile:.0f}th percentile",
+    )
 
-                <div>
-                    <div class="forecast-label">
-                        Predicted de-rated margin
-                    </div>
+    change_col.metric(
+        "Vs latest margin",
+        f"{change_mw / 1000:+.1f} GW",
+    )
 
-                    <div class="forecast-value">
-                        {predicted_drm_mw / 1000:.1f}
-                        <span class="forecast-unit">
-                            GW
-                        </span>
-                    </div>
+    st.caption(
+        f"{description} · "
+        f"Forecast for "
+        f"{target_time.tz_convert('Europe/London').strftime('%d %b %Y · %H:%M %Z')}"
+    )
 
-                    <div class="forecast-description">
-                        {description}
-                    </div>
-                </div>
+    # ----------------------------------------------
+    # Recent actual DRM
+    # ----------------------------------------------
 
-                <div class="forecast-target">
-                    <strong>Forecast target</strong><br>
-                    {target_local.strftime("%d %b %Y")}<br>
-                    {target_local.strftime("%H:%M %Z")}
-                </div>
+    recent = margin.copy()
 
-            </div>
+    recent = recent[
+        recent["event_time_utc"]
+        >= (
+            forecast_origin
+            - pd.Timedelta(hours=48)
+        )
+    ].copy()
 
-            <div class="margin-scale">
-                <div
-                    class="margin-marker"
-                    style="left: {marker_position}%;">
-                </div>
-            </div>
+    recent["drm_gw"] = (
+        recent["derated_margin_mw"]
+        / 1000
+    )
 
-            <div class="scale-labels">
-                <span>Historically tight</span>
-                <span>Typical</span>
-                <span>High margin</span>
-            </div>
+    # ----------------------------------------------
+    # Forecast point
+    # ----------------------------------------------
 
-            <div class="forecast-context">
+    forecast_point = pd.DataFrame(
+        {
+            "event_time_utc": [
+                target_time
+            ],
+            "drm_gw": [
+                predicted_drm_mw / 1000
+            ],
+            "label": [
+                f"{predicted_drm_mw / 1000:.1f} GW"
+            ],
+        }
+    )
 
-                <div>
-                    <span class="context-label">
-                        Historical percentile:
-                    </span>
-                    <span class="context-value">
-                        {percentile:.0f}th
-                    </span>
-                </div>
+    # ----------------------------------------------
+    # Actual history line
+    # ----------------------------------------------
 
-                <div>
-                    <span class="context-label">
-                        Latest margin:
-                    </span>
-                    <span class="context-value">
-                        {latest_margin_mw / 1000:.1f} GW
-                    </span>
-                </div>
+    history_line = (
+        alt.Chart(recent)
+        .mark_line(
+            strokeWidth=2,
+        )
+        .encode(
+            x=alt.X(
+                "event_time_utc:T",
+                title=None,
+            ),
+            y=alt.Y(
+                "drm_gw:Q",
+                title="De-rated margin (GW)",
+                scale=alt.Scale(
+                    zero=False,
+                ),
+            ),
+            tooltip=[
+                alt.Tooltip(
+                    "event_time_utc:T",
+                    title="Time",
+                ),
+                alt.Tooltip(
+                    "drm_gw:Q",
+                    title="DRM",
+                    format=".1f",
+                ),
+            ],
+        )
+    )
 
-                <div>
-                    <span class="context-label">
-                        Change vs latest:
-                    </span>
-                    <span class="context-value">
-                        {difference_mw / 1000:+.1f} GW
-                    </span>
-                </div>
+    # ----------------------------------------------
+    # Forecast marker
+    # ----------------------------------------------
 
-            </div>
+    forecast_dot = (
+        alt.Chart(forecast_point)
+        .mark_point(
+            filled=True,
+            size=180,
+        )
+        .encode(
+            x="event_time_utc:T",
+            y="drm_gw:Q",
+            tooltip=[
+                alt.Tooltip(
+                    "event_time_utc:T",
+                    title="Forecast target",
+                ),
+                alt.Tooltip(
+                    "drm_gw:Q",
+                    title="Predicted DRM",
+                    format=".1f",
+                ),
+            ],
+        )
+    )
 
-        </div>
-        """,
-        unsafe_allow_html=True,
+    forecast_label = (
+        alt.Chart(forecast_point)
+        .mark_text(
+            align="left",
+            dx=12,
+            dy=-12,
+            fontSize=14,
+            fontWeight="bold",
+        )
+        .encode(
+            x="event_time_utc:T",
+            y="drm_gw:Q",
+            text="label:N",
+        )
+    )
+
+    # ----------------------------------------------
+    # Dashed forecast-target marker
+    # ----------------------------------------------
+
+    target_rule = (
+        alt.Chart(
+            pd.DataFrame(
+                {
+                    "event_time_utc": [
+                        target_time
+                    ]
+                }
+            )
+        )
+        .mark_rule(
+            strokeDash=[5, 5],
+        )
+        .encode(
+            x="event_time_utc:T"
+        )
+    )
+
+    chart = (
+        history_line
+        + target_rule
+        + forecast_dot
+        + forecast_label
+    ).properties(
+        height=320,
+    ).interactive()
+
+    st.altair_chart(
+        chart,
+        width="stretch",
+    )
+
+    st.caption(
+        "Solid line: recently published DRM · "
+        "Dot: model prediction exactly 24 hours ahead"
     )
 
 

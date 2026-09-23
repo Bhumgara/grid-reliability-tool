@@ -55,19 +55,14 @@ metrics = load_model_metrics()
 forecast = load_latest_forecast()
 
 
-latest_margin_mw = float(
-    margin.iloc[-1]["derated_margin_mw"]
-)
-
-
 # ==================================================
 # Forecast
 # ==================================================
 
 render_forecast_hero(
-    forecast,
-    margin_history,
-    latest_margin_mw,
+    forecast=forecast,
+    margin=margin,
+    margin_history=margin_history,
 )
 
 
