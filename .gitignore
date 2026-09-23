@@ -221,33 +221,37 @@ __marimo__/
 # Project-specific
 # =========================
 
-# Downloaded / processed energy data
+# Ignore data contents
 data/*
+
+# But keep these directories visible to Git
+!data/raw/
+!data/processed/
+
+# Ignore their contents
 data/raw/*
 data/processed/*
 
-# Keep directory structure in Git if using .gitkeep
+# Except placeholder files
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
-# Trained model artefacts
+
+# Model artefacts
+artifacts/*
+
+# Keep artefact directory structure
+!artifacts/.gitkeep
+
+# Trained model binaries
 *.pkl
 *.joblib
-
-# Optional generated model/output folders
-models/
-artifacts/
-
-# Local PostgreSQL data directory
-# Only relevant if you use a Docker bind mount / local data folder
-postgres-data/
-pgdata/
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# Git diff files
+# Git review files
 review-changes.patch
 review-stat.txt
 review-files.txt
