@@ -6,6 +6,19 @@ import pandas as pd
 
 from core.config import DB_PATH
 
+from model.features import (
+    add_calendar_features,
+    add_drm_lag_features,
+    build_demand_features,
+    build_fuel_features,
+    build_margin_features,
+)
+
+from pipelines.helper import (
+    merge_asof_forecast_origin,
+    report_dataset_diagnostics,
+)
+
 
 TARGET_SQL_PATH = Path("sql/datasets/build_model_dataset.sql")
 OUTPUT_PATH = Path("data/processed/model_dataset.csv")
@@ -122,40 +135,34 @@ def load_fuelhh(conn: sqlite3.Connection) -> pd.DataFrame:
 
     return wide
 
+def load_margin_history(
+    conn: sqlite3.Connection,
+) -> pd.DataFrame:
+    query = """
+        SELECT
+            event_time_utc,
+            published_at_utc,
+            forecast_horizon_hours,
+            derated_margin_mw
+        FROM elexon_margin_lolpdrm
+        WHERE forecast_horizon_hours = 1
+          AND derated_margin_mw IS NOT NULL
+        ORDER BY published_at_utc;
+    """
 
-def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
-    local_time = df["target_time_utc"].dt.tz_convert(
-        "Europe/London"
+    df = pd.read_sql_query(
+        query,
+        conn,
     )
 
-    minute_of_day = (
-        local_time.dt.hour * 60
-        + local_time.dt.minute
+    df["event_time_utc"] = pd.to_datetime(
+        df["event_time_utc"],
+        utc=True,
     )
 
-    df["target_hour_sin"] = np.sin(
-        2 * np.pi * minute_of_day / (24 * 60)
-    )
-    df["target_hour_cos"] = np.cos(
-        2 * np.pi * minute_of_day / (24 * 60)
-    )
-
-    day_of_week = local_time.dt.dayofweek
-
-    df["target_dow_sin"] = np.sin(
-        2 * np.pi * day_of_week / 7
-    )
-    df["target_dow_cos"] = np.cos(
-        2 * np.pi * day_of_week / 7
-    )
-
-    month = local_time.dt.month - 1
-
-    df["target_month_sin"] = np.sin(
-        2 * np.pi * month / 12
-    )
-    df["target_month_cos"] = np.cos(
-        2 * np.pi * month / 12
+    df["published_at_utc"] = pd.to_datetime(
+        df["published_at_utc"],
+        utc=True,
     )
 
     return df
@@ -214,35 +221,9 @@ def add_baseline(
     return result
 
 
-def add_latest_demand(
+def validate_dataset(
     df: pd.DataFrame,
-    demand: pd.DataFrame,
-) -> pd.DataFrame:
-    return pd.merge_asof(
-        df.sort_values("forecast_origin_utc"),
-        demand.sort_values("demand_published_at_utc"),
-        left_on="forecast_origin_utc",
-        right_on="demand_published_at_utc",
-        direction="backward",
-        allow_exact_matches=True,
-    )
-
-
-def add_latest_generation(
-    df: pd.DataFrame,
-    fuel: pd.DataFrame,
-) -> pd.DataFrame:
-    return pd.merge_asof(
-        df.sort_values("forecast_origin_utc"),
-        fuel.sort_values("fuel_published_at_utc"),
-        left_on="forecast_origin_utc",
-        right_on="fuel_published_at_utc",
-        direction="backward",
-        allow_exact_matches=True,
-    )
-
-
-def validate_dataset(df: pd.DataFrame) -> None:
+) -> None:
     if df["target_time_utc"].duplicated().any():
         raise ValueError(
             "Duplicate target timestamps found."
@@ -250,8 +231,11 @@ def validate_dataset(df: pd.DataFrame) -> None:
 
     publication_columns = [
         "baseline_published_at_utc",
+        "drm_48h_published_at_utc",
+        "drm_168h_published_at_utc",
         "demand_published_at_utc",
         "fuel_published_at_utc",
+        "margin_published_at_utc",
     ]
 
     for column in publication_columns:
@@ -259,14 +243,21 @@ def validate_dataset(df: pd.DataFrame) -> None:
 
         leaked = (
             df.loc[available, column]
-            > df.loc[available, "forecast_origin_utc"]
+            > df.loc[
+                available,
+                "forecast_origin_utc",
+            ]
         )
 
         if leaked.any():
             raise ValueError(
-                f"Feature leakage detected in {column}."
+                "Feature leakage detected "
+                f"in {column}."
             )
 
+    # Demand and FUELHH represent historical
+    # observations, so their event itself must not
+    # occur after the forecast origin.
     event_columns = [
         "demand_event_time_utc",
         "fuel_event_time_utc",
@@ -277,7 +268,10 @@ def validate_dataset(df: pd.DataFrame) -> None:
 
         future_event = (
             df.loc[available, column]
-            > df.loc[available, "forecast_origin_utc"]
+            > df.loc[
+                available,
+                "forecast_origin_utc",
+            ]
         )
 
         if future_event.any():
@@ -326,55 +320,69 @@ def build_model_dataset() -> pd.DataFrame:
         targets = load_targets(conn)
         demand = load_demand(conn)
         fuel = load_fuelhh(conn)
+        margin = load_margin_history(conn)
 
     df = targets.copy()
 
-    # Fixed 24-hour-ahead prediction:
-    # forecast origin O = target T - 24 hours.
+    # Fixed 24-hour-ahead prediction.
     df["forecast_origin_utc"] = (
         df["target_time_utc"]
         - pd.Timedelta(hours=24)
     )
 
+    # Known from the target timestamp itself.
     df = add_calendar_features(df)
 
+    # 24-hour persistence benchmark.
     df = add_baseline(
         df,
         targets,
     )
 
-    df = add_latest_demand(
+    # Exact historical DRM look-backs.
+    df = add_drm_lag_features(
         df,
+        targets,
+    )
+
+    # Build temporal features independently
+    # on the underlying source series.
+    demand_features = build_demand_features(
         demand,
+        window=10,
     )
 
-    df = add_latest_generation(
-        df,
+    fuel_features = build_fuel_features(
         fuel,
+        window=10,
     )
 
-    bad_baseline = df[
-        df["baseline_published_at_utc"].notna()
-        & (
-            df["baseline_published_at_utc"]
-            > df["forecast_origin_utc"]
-        )
-    ]
-
-    print("Unsafe baseline rows:", len(bad_baseline))
-
-    print(
-        bad_baseline[
-            [
-                "target_time_utc",
-                "forecast_origin_utc",
-                "baseline_time_utc",
-                "baseline_published_at_utc",
-                "baseline_drm_yesterday_mw",
-            ]
-        ].head(20)
+    margin_features = build_margin_features(
+        margin,
+        window=10,
     )
 
+    # Attach only feature snapshots that were
+    # available by each forecast origin.
+    df = merge_asof_forecast_origin(
+        df,
+        demand_features,
+        "demand_published_at_utc",
+    )
+
+    df = merge_asof_forecast_origin(
+        df,
+        fuel_features,
+        "fuel_published_at_utc",
+    )
+
+    df = merge_asof_forecast_origin(
+        df,
+        margin_features,
+        "margin_published_at_utc",
+    )
+
+    report_dataset_diagnostics(df)
     validate_dataset(df)
 
     df = df.sort_values(
@@ -393,7 +401,9 @@ def build_model_dataset() -> pd.DataFrame:
         index=False,
     )
 
+    print()
     print(f"Dataset rows: {len(df):,}")
+
     print(
         "Target range:",
         df["target_time_utc"].min(),
@@ -416,7 +426,22 @@ def build_model_dataset() -> pd.DataFrame:
         f"{df['fuel_published_at_utc'].notna().mean():.2%}",
     )
 
-    print(f"Saved to database table: model_dataset")
-    print(f"Saved to {OUTPUT_PATH}")
+    print(
+        "Margin history coverage:",
+        f"{df['margin_published_at_utc'].notna().mean():.2%}",
+    )
+
+    print(
+        "Saved to database table: model_dataset"
+    )
+
+    print(
+        f"Saved to {OUTPUT_PATH}"
+    )
 
     return df
+
+
+
+if __name__ == "__main__":
+    build_model_dataset()
