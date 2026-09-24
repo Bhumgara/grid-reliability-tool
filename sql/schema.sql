@@ -44,6 +44,22 @@ CREATE TABLE IF NOT EXISTS elexon_generation_fuelhh (
     )
 );
 
+CREATE TABLE IF NOT EXISTS elexon_generation_fuelinst (
+    event_time_utc TEXT NOT NULL,
+    published_at_utc TEXT NOT NULL,
+    settlement_date TEXT NOT NULL,
+    settlement_period INTEGER NOT NULL,
+    fuel_type TEXT NOT NULL,
+    generation_mw REAL NOT NULL,
+    source TEXT NOT NULL,
+
+    PRIMARY KEY (
+        event_time_utc,
+        fuel_type,
+        published_at_utc
+    )
+);
+
 CREATE TABLE IF NOT EXISTS neso_generation_mix (
     interval_start_utc TEXT NOT NULL,
     interval_end_utc TEXT NOT NULL,
@@ -59,4 +75,22 @@ CREATE TABLE IF NOT EXISTS neso_generation_mix (
     source TEXT NOT NULL,
 
     PRIMARY KEY (interval_start_utc)
+);
+
+CREATE TABLE IF NOT EXISTS neso_demand_update (
+    settlement_date TEXT NOT NULL,
+    settlement_period INTEGER NOT NULL,
+    forecast_actual_indicator TEXT NOT NULL,
+
+    embedded_wind_mw REAL,
+    embedded_solar_mw REAL,
+    pump_storage_pumping_mw REAL,
+
+    source TEXT NOT NULL,
+
+    PRIMARY KEY (
+        settlement_date,
+        settlement_period,
+        forecast_actual_indicator
+    )
 );

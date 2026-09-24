@@ -6,7 +6,7 @@
 
 ### 1. What's the idea, and why does it matter to me?
 
-Every half hour, Great Britain's electricity comes from a changing mix of wind, solar, nuclear, gas, storage and imports. My tool aims to forecast when the supply-demand margin is likely to become tight over the next 24 hours, then uses GenAI to explain the drivers in plain English. The aim is to turn excellent open energy data into decision support, not another live data dashboard.
+Every half hour, the UK's electricity comes from a changing mix of wind, solar, nuclear, gas, storage and imports. My tool aims to forecast when the supply-demand margin is likely to become tight over the next 24 hours, then uses GenAI to explain the drivers in plain English. The aim is to turn excellent open energy data into decision support, not another live data dashboard.
 
 The project combines three things I am particularly interested in: the development of the UK energy grid, applied data/AI, and building something with a credible user and business case. It also lets me learn a partially new domain through hands-on API and modelling work.
 

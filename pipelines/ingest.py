@@ -2,11 +2,13 @@ from core.api.elexon import (
     fetch_lolpdrm,
     fetch_indo,
     fetch_fuelhh,
+    fetch_fuelinst,
     save_raw,
 )
 
 from core.api.neso import (
     fetch_generation_mix,
+    fetch_demand_update,
     save_raw_neso,
 )
 
@@ -14,7 +16,9 @@ from core.normalise import (
     normalise_elexon_lolpdrm,
     normalise_elexon_indo,
     normalise_elexon_fuelhh,
+    normalise_elexon_fuelinst,
     normalise_neso_generation_mix,
+    normalise_neso_demand_update,
 )
 
 from core.db import (
@@ -22,12 +26,16 @@ from core.db import (
     count_demand_indo_rows,
     count_target_rows,
     count_generation_fuelhh_rows,
+    count_generation_fuelinst_rows,
     count_neso_generation_mix_rows,
+    count_neso_demand_update_rows,
     initialise_database,
     upsert_margin_lolpdrm_rows,
     upsert_demand_indo_rows,
     upsert_generation_fuelhh_rows,
+    upsert_generation_fuelinst_rows,
     upsert_neso_generation_mix_rows,
+    upsert_neso_demand_update_rows,
 )
 
 from datetime import datetime, timedelta
@@ -158,6 +166,54 @@ def ingest_fuelhh(from_dt: str, to_dt: str):
         f"{count_generation_fuelhh_rows()}"
     )
 
+def ingest_fuelinst(
+    from_dt: str,
+    to_dt: str,
+):
+    start, end = validate_backfill_range(
+        from_dt,
+        to_dt,
+    )
+
+    raw = fetch_fuelinst(
+        start,
+        end,
+    )
+
+    safe_from = start.replace(
+        ":",
+        "-",
+    )
+    safe_to = end.replace(
+        ":",
+        "-",
+    )
+
+    save_raw(
+        raw,
+        f"fuelinst_{safe_from}_{safe_to}.json",
+    )
+
+    rows = normalise_elexon_fuelinst(
+        raw["data"]
+    )
+
+    print(
+        "FUELINST generation rows fetched: "
+        f"{len(rows)}"
+    )
+
+    initialise_database()
+
+    upsert_generation_fuelinst_rows(
+        rows
+    )
+
+    print(
+        "FUELINST rows in database: "
+        f"{count_generation_fuelinst_rows()}"
+    )
+
 def ingest_neso_generation_mix(
     from_dt: str,
     to_dt: str,
@@ -192,6 +248,42 @@ def ingest_neso_generation_mix(
     print(
         "NESO generation mix rows in database: "
         f"{count_neso_generation_mix_rows()}"
+    )
+
+def ingest_neso_demand_update():
+    raw = fetch_demand_update()
+
+    save_raw_neso(
+        raw,
+        "demand_update.json",
+    )
+
+    records = raw[
+        "result"
+    ][
+        "records"
+    ]
+
+    rows = (
+        normalise_neso_demand_update(
+            records
+        )
+    )
+
+    initialise_database()
+
+    upsert_neso_demand_update_rows(
+        rows
+    )
+
+    print(
+        "NESO demand update fetched: "
+        f"{len(rows)}"
+    )
+
+    print(
+        "NESO demand update rows in database: "
+        f"{count_neso_demand_update_rows()}"
     )
 
 

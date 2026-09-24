@@ -225,3 +225,14 @@ SELECT
 FROM neso_generation_mix
 ORDER BY interval_start_utc
 LIMIT 20;
+
+-- ============================================================
+-- NESO DEMAND INSPECTIONS
+-- ============================================================
+
+SELECT *
+FROM neso_demand_update
+ORDER BY
+    settlement_date DESC,
+    settlement_period DESC
+LIMIT 10;
