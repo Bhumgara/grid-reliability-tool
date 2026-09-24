@@ -151,6 +151,139 @@ def load_recent_generation(days: int = 7) -> pd.DataFrame:
         .sort_index()
     )
 
+@st.cache_data(ttl=LIVE_CACHE_TTL)
+def load_live_generation_mix() -> pd.DataFrame:
+    with _connect() as conn:
+        latest_fuelinst = pd.read_sql_query(
+            """
+            SELECT
+                event_time_utc,
+                settlement_date,
+                settlement_period,
+                fuel_type,
+                generation_mw
+            FROM elexon_generation_fuelinst
+            WHERE event_time_utc = (
+                SELECT MAX(event_time_utc)
+                FROM elexon_generation_fuelinst
+            )
+            """,
+            conn,
+        )
+
+    if latest_fuelinst.empty:
+        return pd.DataFrame()
+
+    settlement_date = (
+        latest_fuelinst["settlement_date"].iloc[0]
+    )
+    settlement_period = int(
+        latest_fuelinst["settlement_period"].iloc[0]
+    )
+
+    with _connect() as conn:
+        neso = pd.read_sql_query(
+            """
+            SELECT
+                embedded_wind_mw,
+                embedded_solar_mw,
+                forecast_actual_indicator
+            FROM neso_demand_update
+            WHERE settlement_date = ?
+            AND settlement_period = ?
+            ORDER BY
+                CASE
+                    WHEN forecast_actual_indicator = 'A'
+                    THEN 0
+                    ELSE 1
+                END
+            LIMIT 1
+            """,
+            conn,
+            params=(
+                settlement_date,
+                settlement_period,
+            ),
+        )
+
+    fuelinst = (
+        latest_fuelinst
+        .set_index("fuel_type")["generation_mw"]
+        .to_dict()
+    )
+
+    neso_indicator = (
+        neso["forecast_actual_indicator"].iloc[0]
+        if not neso.empty
+        else None
+    )
+
+    embedded_wind = (
+        float(
+            neso["embedded_wind_mw"]
+            .fillna(0.0)
+            .iloc[0]
+        )
+        if not neso.empty
+        else 0.0
+    )
+
+    embedded_solar = (
+        float(
+            neso["embedded_solar_mw"]
+            .fillna(0.0)
+            .iloc[0]
+        )
+        if not neso.empty
+        else 0.0
+    )
+
+    generation_mix = {
+        "CCGT": (
+            fuelinst.get("CCGT", 0.0)
+            + fuelinst.get("OCGT", 0.0)
+        ),    
+        "COAL": fuelinst.get("COAL", 0.0),
+        "OIL": fuelinst.get("OIL", 0.0),
+        "NUCLEAR": fuelinst.get(
+            "NUCLEAR",
+            0.0,
+        ),
+        "BIOMASS": fuelinst.get(
+            "BIOMASS",
+            0.0,
+        ),
+        "NPSHYD": fuelinst.get(
+            "NPSHYD",
+            0.0,
+        ),
+        "OTHER": fuelinst.get(
+            "OTHER",
+            0.0,
+        ),
+        "WIND": (
+            fuelinst.get("WIND", 0.0)
+            + embedded_wind
+        ),
+        "SOLAR": embedded_solar,
+    }
+
+    return pd.DataFrame(
+    [
+        {
+            "event_time_utc":
+                latest_fuelinst[
+                    "event_time_utc"
+                ].iloc[0],
+            "fuel_type": fuel,
+            "generation_mw": mw,
+            "embedded_data_status":
+                neso_indicator,
+        }
+        for fuel, mw
+        in generation_mix.items()
+    ]
+)
 
 @st.cache_data
 def load_margin_history() -> pd.Series:

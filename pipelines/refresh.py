@@ -29,6 +29,8 @@ from pipelines.ingest import (
     backfill_indo,
     backfill_lolpdrm,
     backfill_neso_generation_mix,
+    ingest_fuelinst,
+    ingest_neso_demand_update,
 )
 from pipelines.predict import run_prediction
 
@@ -371,6 +373,77 @@ def refresh_window(
     return start, end
 
 
+def refresh_live_display_data(
+    now: pd.Timestamp,
+) -> dict:
+    """
+    Refresh optional display-only sources.
+
+    Failures here must not block the model forecast or
+    prevent the dashboard serving cached values.
+    """
+    results = {}
+
+    fuelinst_end = now.floor("5min")
+    fuelinst_start = (
+        fuelinst_end
+        - pd.Timedelta(hours=2)
+    )
+
+    try:
+        ingest_fuelinst(
+            api_time(fuelinst_start),
+            api_time(fuelinst_end),
+        )
+
+        results["FUELINST"] = {
+            "status": "updated",
+            "from_utc": iso_utc(
+                fuelinst_start
+            ),
+            "to_utc": iso_utc(
+                fuelinst_end
+            ),
+            "error": None,
+        }
+
+    except Exception as exc:
+        results["FUELINST"] = {
+            "status": "error",
+            "from_utc": iso_utc(
+                fuelinst_start
+            ),
+            "to_utc": iso_utc(
+                fuelinst_end
+            ),
+            "error": (
+                f"{type(exc).__name__}: "
+                f"{exc}"
+            ),
+        }
+
+    try:
+        ingest_neso_demand_update()
+
+        results["NESO demand update"] = {
+            "status": "updated",
+            "error": None,
+        }
+
+    except Exception as exc:
+        results[
+            "NESO demand update"
+        ] = {
+            "status": "error",
+            "error": (
+                f"{type(exc).__name__}: "
+                f"{exc}"
+            ),
+        }
+
+    return results
+
+
 def refresh_live_data(force: bool = False) -> dict:
     """
     Refresh source data and regenerate the latest forecast.
@@ -390,8 +463,18 @@ def refresh_live_data(force: bool = False) -> dict:
     started = utc_now()
 
     try:
+        display_refresh = (
+            refresh_live_display_data(
+                started
+            )
+        )
+
         before = inspect_sources(started)
-        should_refresh = force or needs_refresh(started)
+
+        should_refresh = (
+            force
+            or needs_refresh(started)
+        )
 
         if not should_refresh:
             payload = {
@@ -400,6 +483,7 @@ def refresh_live_data(force: bool = False) -> dict:
                 "started_at_utc": iso_utc(started),
                 "completed_at_utc": iso_utc(utc_now()),
                 "sources": before,
+                "display_refresh": display_refresh,
                 "prediction": {
                     "status": "current",
                     "generated_at_utc": iso_utc(
@@ -546,6 +630,7 @@ def refresh_live_data(force: bool = False) -> dict:
             "sources_before": before,
             "sources": after,
             "source_refresh": source_results,
+            "display_refresh": display_refresh,
             "prediction": prediction_result,
         }
 
