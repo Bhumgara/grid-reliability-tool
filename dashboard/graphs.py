@@ -11,31 +11,47 @@ from typing import Any
 
 import altair as alt
 import pandas as pd
+import streamlit as st
 
 ChartSet = dict[str, Any]
 
 FUEL_LABELS = {
     "CCGT": "Gas",
-    "WIND": "Wind",
+    "COAL": "Coal",
+    "OIL": "Oil",
     "NUCLEAR": "Nuclear",
     "BIOMASS": "Biomass",
     "NPSHYD": "Hydro",
+    "WIND": "Wind",
+    "SOLAR": "Solar",
     "PS": "Pumped storage",
 
-    "INTFR": "France · IFA",
-    "INTIFA2": "France · IFA2",
-    "INTELEC": "France · ElecLink",
-
-    "INTVKL": "Denmark Link",
-    "INTNED": "Netherlands Link",
-    "INTNSL": "Norway Link",
-    "INTNEM": "Belgium Link",
-
-    "INTIRL": "Ireland · Moyle",
-    "INTEW": "Ireland · East-West",
-    "INTGRNL": "Ireland · Greenlink",
-
     "OTHER": "Other",
+}
+
+INTERCONNECTOR_GROUPS = {
+    "Belgium": [
+        "INTNEM",
+    ],
+    "Denmark": [
+        "INTVKL",
+    ],
+    "France": [
+        "INTFR",
+        "INTIFA2",
+        "INTELEC",
+    ],
+    "Ireland": [
+        "INTIRL",
+        "INTEW",
+        "INTGRNL",
+    ],
+    "Netherlands": [
+        "INTNED",
+    ],
+    "Norway": [
+        "INTNSL",
+    ],
 }
 
 
@@ -805,18 +821,30 @@ def _latest_generation_snapshot(
         == latest_time
     ].copy()
 
-    fuels = [
-        column
-        for column in latest.columns
-        if column != "event_time_utc"
-    ]
+    if {
+        "fuel_type",
+        "generation_mw",
+    }.issubset(latest.columns):
+        mix = latest[
+            [
+                "fuel_type",
+                "generation_mw",
+            ]
+        ].copy()
 
-    mix = latest.melt(
-        id_vars="event_time_utc",
-        value_vars=fuels,
-        var_name="fuel_type",
-        value_name="generation_mw",
-    )
+    else:
+        fuels = [
+            column
+            for column in latest.columns
+            if column != "event_time_utc"
+        ]
+
+        mix = latest.melt(
+            id_vars="event_time_utc",
+            value_vars=fuels,
+            var_name="fuel_type",
+            value_name="generation_mw",
+        )
 
     mix = (
         mix.dropna(
@@ -830,7 +858,7 @@ def _latest_generation_snapshot(
     )
 
     mix = mix[
-        mix["generation_mw"] >= 0
+        mix["generation_mw"] > 0
     ].copy()
 
     mix["generation_gw"] = (
@@ -1059,6 +1087,7 @@ def build_forecast_percentile_graph(
 
 def build_drm_change_bridge(
     forecast: dict,
+    current_drm_mw: float,
 ) -> alt.TopLevelMixin:
     """
     Compare the latest known DRM with the 24-hour-ahead prediction.
@@ -1069,7 +1098,7 @@ def build_drm_change_bridge(
     """
     latest = (
         float(
-            forecast["latest_drm_mw"]
+            current_drm_mw
         )
         / 1000
     )
@@ -1196,7 +1225,7 @@ def build_drm_change_bridge(
     connector = (
         alt.Chart(bridge)
         .mark_rule(
-            strokeWidth=4,
+            strokeWidth=3,
         )
         .encode(
             x=alt.X(
@@ -1224,11 +1253,55 @@ def build_drm_change_bridge(
         )
     )
 
-    point_chart = (
-        alt.Chart(points)
+    if delta > 0:
+        arrow_shape = "triangle-right"
+
+        current_align = "right"
+        current_dx = -10
+
+        forecast_align = "left"
+        forecast_dx = 10
+
+    elif delta < 0:
+        arrow_shape = "triangle-left"
+
+        current_align = "left"
+        current_dx = 10
+
+        forecast_align = "right"
+        forecast_dx = -10
+
+    else:
+        arrow_shape = "diamond"
+
+        current_align = "center"
+        current_dx = 0
+
+        forecast_align = "center"
+        forecast_dx = 0
+
+
+    forecast_point = points[
+        points["state"]
+        == "24h forecast"
+    ]
+
+    current_point = points[
+        points["state"]
+        == "Current"
+    ]
+
+
+    forecast_arrow = (
+        alt.Chart(
+            forecast_point
+        )
         .mark_point(
             filled=True,
             size=220,
+            shape=arrow_shape,
+            color="black",
+            fillOpacity=1
         )
         .encode(
             x=x_encoding,
@@ -1237,21 +1310,6 @@ def build_drm_change_bridge(
                 axis=None,
                 scale=alt.Scale(
                     domain=[0, 1]
-                ),
-            ),
-            shape=alt.Shape(
-                "state:N",
-                title=None,
-                legend=None,
-                scale=alt.Scale(
-                    domain=[
-                        "Current",
-                        "24h forecast",
-                    ],
-                    range=[
-                        "square",
-                        "circle",
-                    ],
                 ),
             ),
             tooltip=[
@@ -1265,11 +1323,17 @@ def build_drm_change_bridge(
         )
     )
 
-    labels = (
-        alt.Chart(points)
+
+    current_label = (
+        alt.Chart(
+            current_point
+        )
         .mark_text(
-            fontWeight="bold",
+            fontWeight="normal",
             fontSize=12,
+            align=current_align,
+            dx=current_dx,
+            dy=-22,
         )
         .encode(
             x=alt.X(
@@ -1281,7 +1345,39 @@ def build_drm_change_bridge(
                 ),
             ),
             y=alt.Y(
-                "label_y:Q",
+                "position:Q",
+                axis=None,
+                scale=alt.Scale(
+                    domain=[0, 1]
+                ),
+            ),
+            text="label:N",
+        )
+    )
+
+
+    forecast_label = (
+        alt.Chart(
+            forecast_point
+        )
+        .mark_text(
+            fontWeight="normal",
+            fontSize=12,
+            align=forecast_align,
+            dx=forecast_dx,
+            dy=-22,
+        )
+        .encode(
+            x=alt.X(
+                "drm_gw:Q",
+                scale=alt.Scale(
+                    domain=x_domain,
+                    zero=False,
+                    nice=False,
+                ),
+            ),
+            y=alt.Y(
+                "position:Q",
                 axis=None,
                 scale=alt.Scale(
                     domain=[0, 1]
@@ -1318,8 +1414,9 @@ def build_drm_change_bridge(
 
     return (
         connector
-        + point_chart
-        + labels
+        + forecast_arrow
+        + current_label
+        + forecast_label
         + delta_label
     ).properties(
         title=(
@@ -2772,6 +2869,7 @@ def build_concept_graphs(
 
 FUEL_COLOURS = {
     "WIND": "#4E79A7",
+    "SOLAR": "#F2C94C",
     "CCGT": "#E15759",
     "NUCLEAR": "#F1CE63",
     "BIOMASS": "#59A14F",
@@ -2988,7 +3086,7 @@ def build_demand_settlement_bars(
 
 def build_generation_doughnut_dashboard(
     generation: pd.DataFrame,
-    minimum_share: float = 0.025,
+    minimum_share: float = 0.0025,
 ) -> alt.TopLevelMixin:
     """
     Current generation mix with:
@@ -3088,8 +3186,8 @@ def build_generation_doughnut_dashboard(
             mix["share"]
             * 100
         )
-        .round(0)
-        .astype(int)
+        .round(2)
+        .astype(float)
         .astype(str)
         + "%"
     )
@@ -3161,7 +3259,7 @@ def build_generation_doughnut_dashboard(
                 alt.Tooltip(
                     "share:Q",
                     title="Share",
-                    format=".1%",
+                    format=".2%",
                 ),
             ],
         )
@@ -3224,6 +3322,124 @@ def build_generation_doughnut_dashboard(
                     anchor="start",
                 ),
     )
+
+def render_interconnector_list(
+    interconnectors: pd.DataFrame,
+) -> None:
+    if interconnectors.empty:
+        st.caption(
+            "No current interconnector data."
+        )
+        return
+
+    data = interconnectors.copy()
+
+    if "flow_gw" not in data.columns:
+        if "generation_mw" not in data.columns:
+            raise ValueError(
+                "Interconnector data requires "
+                "'flow_gw' or 'generation_mw'."
+            )
+
+        data["flow_gw"] = (
+            data["generation_mw"]
+            / 1000
+        )
+
+    flows = (
+        data
+        .set_index("fuel_type")["flow_gw"]
+        .to_dict()
+    )
+
+    rows = []
+
+    for country, codes in (
+        INTERCONNECTOR_GROUPS.items()
+    ):
+        flow_gw = sum(
+            flows.get(code, 0.0)
+            for code in codes
+        )
+
+        if flow_gw > 0.01:
+            direction = "Import"
+            arrow = "→"
+        elif flow_gw < -0.01:
+            direction = "Export"
+            arrow = "←"
+        else:
+            direction = "Idle"
+            arrow = "—"
+
+        rows.append(
+            {
+                "country": country,
+                "flow_gw": flow_gw,
+                "direction": direction,
+                "arrow": arrow,
+            }
+        )
+
+    net_flow = sum(
+        row["flow_gw"]
+        for row in rows
+    )
+
+    if net_flow > 0:
+        net_label = (
+            f"Net import "
+            f"{net_flow:.2f} GW"
+        )
+    elif net_flow < 0:
+        net_label = (
+            f"Net export "
+            f"{abs(net_flow):.2f} GW"
+        )
+    else:
+        net_label = "Net flow 0.00 GW"
+
+    st.markdown(
+        f"""
+        <div class="flow-header">
+            <strong>Interconnectors</strong>
+            <span>{net_label}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    for row in rows:
+        value = row["flow_gw"]
+
+        if value > 0:
+            value_label = (
+                f"+{value:.2f} GW"
+            )
+        else:
+            value_label = (
+                f"{value:.2f} GW"
+            )
+
+        st.markdown(
+            f"""
+            <div class="flow-row">
+                <span class="flow-name">
+                    {row["country"]}
+                </span>
+                <span class="flow-direction">
+                    {row["direction"]}
+                </span>
+                <span class="flow-value">
+                    {value_label}
+                </span>
+                <span class="flow-arrow">
+                    {row["arrow"]}
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 def build_generation_change_dashboard(
     generation: pd.DataFrame,

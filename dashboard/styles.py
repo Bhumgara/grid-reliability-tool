@@ -38,6 +38,50 @@ def apply_styles() -> None:
             [data-testid="stCaptionContainer"] {
                 opacity: 0.78;
             }
+
+            .flow-header,
+            .flow-row {
+                display: grid;
+                grid-template-columns:
+                    1fr auto auto 24px;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .flow-header {
+                padding: 10px 12px;
+                margin-top: 8px;
+                border-bottom: 1px solid rgba(128, 128, 128, 0.22);
+            }
+
+            .flow-header span {
+                grid-column: 2 / 5;
+                text-align: right;
+            }
+
+            .flow-row {
+                padding: 8px 12px;
+                border-bottom: 1px solid rgba(128, 128, 128, 0.12);
+            }
+
+            .flow-name {
+                font-weight: 500;
+            }
+
+            .flow-direction {
+                color: #6b7280;
+                font-size: 0.85rem;
+            }
+
+            .flow-value {
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+
+            .flow-arrow {
+                text-align: center;
+                font-weight: 600;
+            }
         </style>
         """,
         unsafe_allow_html=True,

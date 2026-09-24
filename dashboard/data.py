@@ -285,6 +285,26 @@ def load_live_generation_mix() -> pd.DataFrame:
     ]
 )
 
+@st.cache_data(ttl=LIVE_CACHE_TTL)
+def load_live_interconnectors() -> pd.DataFrame:
+    with _connect() as conn:
+        return pd.read_sql_query(
+            """
+            SELECT
+                event_time_utc,
+                fuel_type,
+                generation_mw
+            FROM elexon_generation_fuelinst
+            WHERE event_time_utc = (
+                SELECT MAX(event_time_utc)
+                FROM elexon_generation_fuelinst
+            )
+            AND fuel_type LIKE 'INT%'
+            ORDER BY fuel_type
+            """,
+            conn,
+        )
+
 @st.cache_data
 def load_margin_history() -> pd.Series:
     query = """

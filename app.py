@@ -21,6 +21,8 @@ from dashboard.data import (
     load_recent_margin,
     load_refresh_status,
     load_validation_predictions,
+    load_live_generation_mix,
+    load_live_interconnectors,
 )
 from dashboard.styles import apply_styles
 
@@ -40,7 +42,7 @@ start_background_worker()
 
 st.title("UK Energy Reliability Tool")
 st.caption(
-    "Forecasting Great Britain's electricity "
+    "Forecasting the UK's electricity "
     "supply-demand margin 24 hours ahead"
 )
 
@@ -61,6 +63,8 @@ def render_live_dashboard() -> None:
     margin = load_recent_margin(days=7)
     demand = load_recent_demand(days=7)
     generation = load_recent_generation(days=7)
+    live_generation = load_live_generation_mix()
+    interconnectors = load_live_interconnectors()
 
     # Longer demand history supports the typical-day comparison.
     demand_history = load_recent_demand(days=90)
@@ -96,6 +100,8 @@ def render_live_dashboard() -> None:
 
     render_generation_section(
         generation=generation,
+        live_generation=live_generation,
+        interconnectors=interconnectors,
     )
 
     # How good is the model?

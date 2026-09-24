@@ -7,6 +7,7 @@ from dashboard.graphs import (
     build_forecast_graphs,
     build_generation_change_dashboard,
     build_generation_doughnut_dashboard,
+    render_interconnector_list,
     build_margin_graphs,
     build_model_vs_persistence_vertical,
     build_typical_day_demand_dashboard,
@@ -278,7 +279,8 @@ def render_forecast_hero(
     with bridge:
         st.altair_chart(
             build_drm_change_bridge(
-                forecast
+                forecast,
+                current_drm_mw=latest,
             ),
             width="stretch",
         )
@@ -480,6 +482,8 @@ def render_demand_context(
 
 def render_generation_section(
     generation: pd.DataFrame,
+    live_generation: pd.DataFrame,
+    interconnectors: pd.DataFrame,
 ) -> None:
     st.markdown(
         "## Generation"
@@ -491,19 +495,25 @@ def render_generation_section(
         )
         return
 
-    # mix, movement = (
-    #     st.columns(
-    #         [2, 1]
-    #     )
-    # )
-
-# with mix:
-    st.altair_chart(
-        build_generation_doughnut_dashboard(
-            generation
-        ),
-        width="stretch",
+    gen_mix, interconnector_section = (
+        st.columns(
+            [2, 1]
+        )
     )
+
+    with gen_mix:
+        st.altair_chart(
+            build_generation_doughnut_dashboard(
+                live_generation,
+                minimum_share=0.0
+            ),
+            width="stretch",
+        )
+
+    with interconnector_section:
+            render_interconnector_list(
+                interconnectors
+            )
 
     st.caption(
         "Small positive contributors are grouped into Other. "
@@ -511,7 +521,7 @@ def render_generation_section(
         "as doughnut slices."
     )
 
-# with movement:
+
     st.altair_chart(
         build_generation_change_dashboard(
             generation,

@@ -1,6 +1,6 @@
 # UK Grid Reliability Tool
 
-A capstone project exploring a forward-looking view of Great Britain's electricity system, with a focus on forecasting grid margin tightness over the next 24 hours.
+A capstone project exploring a forward-looking view of the UK's electricity system, with a focus on forecasting grid margin tightness over the next 24 hours.
 
 > **Current status:** Planning and target definition complete; implementation is beginning.
 
