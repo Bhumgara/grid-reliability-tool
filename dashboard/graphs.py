@@ -2607,3 +2607,1102 @@ def build_concept_graphs(
         )
 
     return charts
+
+
+# ============================================================
+# Dashboard-selected chart implementations
+# ============================================================
+
+FUEL_COLOURS = {
+    "WIND": "#4E79A7",
+    "CCGT": "#E15759",
+    "NUCLEAR": "#F1CE63",
+    "BIOMASS": "#59A14F",
+    "NPSHYD": "#76B7B2",
+    "PS": "#B07AA1",
+    "OCGT": "#FF9DA7",
+    "OIL": "#9C755F",
+    "COAL": "#79706E",
+    "OTHER": "#BAB0AC",
+    "INTELEC": "#86BCB6",
+    "INTEW": "#8CD17D",
+    "INTFR": "#499894",
+    "INTGRNL": "#D4A6C8",
+    "INTIFA2": "#FABFD2",
+    "INTIRL": "#B6992D",
+    "INTNED": "#D37295",
+    "INTNEM": "#A0CBE8",
+    "INTNSL": "#FFBE7D",
+    "INTVKL": "#8F7C6E",
+}
+
+
+def _fuel_scale(values: pd.Series) -> alt.Scale:
+    domain = [
+        value
+        for value in values.dropna().unique().tolist()
+    ]
+
+    colours = [
+        FUEL_COLOURS.get(
+            value,
+            "#A7A7A7",
+        )
+        for value in domain
+    ]
+
+    return alt.Scale(
+        domain=domain,
+        range=colours,
+    )
+
+
+def build_demand_settlement_bars(
+    demand: pd.DataFrame,
+) -> alt.TopLevelMixin:
+    """
+    Settlement-period demand bars.
+
+    Internal missing half-hours are linearly interpolated for display only
+    and explicitly labelled Estimated. Leading/trailing gaps remain blank.
+    Nothing is written back to the source data.
+    """
+    _require_columns(
+        demand,
+        [
+            "event_time_utc",
+            "demand_mw",
+        ],
+        "Demand settlement bars",
+    )
+
+    data = demand[
+        [
+            "event_time_utc",
+            "demand_mw",
+        ]
+    ].copy()
+
+    data["event_time_utc"] = pd.to_datetime(
+        data["event_time_utc"],
+        utc=True,
+    )
+
+    data = (
+        data.sort_values(
+            "event_time_utc"
+        )
+        .drop_duplicates(
+            "event_time_utc",
+            keep="last",
+        )
+        .set_index(
+            "event_time_utc"
+        )
+    )
+
+    if data.empty:
+        return (
+            alt.Chart(
+                pd.DataFrame(
+                    {
+                        "message": [
+                            "No demand data"
+                        ]
+                    }
+                )
+            )
+            .mark_text()
+            .encode(
+                text="message:N"
+            )
+            .properties(
+                height=300
+            )
+        )
+
+    complete_index = pd.date_range(
+        start=data.index.min(),
+        end=data.index.max(),
+        freq="30min",
+        tz="UTC",
+    )
+
+    data = data.reindex(
+        complete_index
+    )
+
+    data.index.name = (
+        "event_time_utc"
+    )
+
+    data["data_type"] = (
+        data["demand_mw"]
+        .notna()
+        .map(
+            {
+                True: "Observed",
+                False: "Estimated",
+            }
+        )
+    )
+
+    data["display_demand_mw"] = (
+        data["demand_mw"]
+        .interpolate(
+            method="time",
+            limit_area="inside",
+        )
+    )
+
+    data = (
+        data.reset_index()
+        .dropna(
+            subset=[
+                "display_demand_mw"
+            ]
+        )
+    )
+
+    data["demand_gw"] = (
+        data["display_demand_mw"]
+        / 1000
+    )
+
+    return (
+        alt.Chart(data)
+        .mark_bar(
+            size=5,
+        )
+        .encode(
+            x=alt.X(
+                "event_time_utc:T",
+                title=None,
+                axis=alt.Axis(
+                    labelAngle=0,
+                ),
+            ),
+            y=alt.Y(
+                "demand_gw:Q",
+                title="Demand (GW)",
+                scale=alt.Scale(
+                    zero=False,
+                ),
+            ),
+            color=alt.Color(
+                "data_type:N",
+                title="Data",
+                scale=alt.Scale(
+                    domain=[
+                        "Observed",
+                        "Estimated",
+                    ],
+                    range=[
+                        "#4E79A7",
+                        "#F2A541",
+                    ],
+                ),
+            ),
+            tooltip=[
+                alt.Tooltip(
+                    "event_time_utc:T",
+                    title="Settlement period",
+                ),
+                alt.Tooltip(
+                    "demand_gw:Q",
+                    title="Demand",
+                    format=".1f",
+                ),
+                alt.Tooltip(
+                    "data_type:N",
+                    title="Data",
+                ),
+            ],
+        )
+        .properties(
+            title=(
+                "Electricity demand by "
+                "settlement period"
+            ),
+            height=300,
+        )
+    )
+
+
+def build_generation_doughnut_dashboard(
+    generation: pd.DataFrame,
+    minimum_share: float = 0.025,
+) -> alt.TopLevelMixin:
+    """
+    Current generation mix with:
+      - small categories grouped into Other,
+      - semantic fuel colours,
+      - total positive tracked generation in the centre,
+      - outside text labels for readable major contributors.
+    """
+    mix, latest_time = (
+        _latest_generation_snapshot(
+            generation
+        )
+    )
+
+    if mix.empty:
+        raise ValueError(
+            "No generation mix available."
+        )
+
+    small = (
+        mix["share"]
+        < minimum_share
+    )
+
+    if small.any():
+        other_gw = mix.loc[
+            small,
+            "generation_gw",
+        ].sum()
+
+        mix = mix.loc[
+            ~small
+        ].copy()
+
+        if other_gw > 0:
+            mix = pd.concat(
+                [
+                    mix,
+                    pd.DataFrame(
+                        {
+                            "fuel_type": [
+                                "OTHER"
+                            ],
+                            "generation_gw": [
+                                other_gw
+                            ],
+                        }
+                    ),
+                ],
+                ignore_index=True,
+            )
+
+    mix = (
+        mix.groupby(
+            "fuel_type",
+            as_index=False,
+        )["generation_gw"]
+        .sum()
+    )
+
+    total_gw = mix[
+        "generation_gw"
+    ].sum()
+
+    mix["share"] = (
+        mix["generation_gw"]
+        / total_gw
+    )
+
+    mix = mix.sort_values(
+        "generation_gw",
+        ascending=False,
+    ).reset_index(
+        drop=True
+    )
+
+    mix["label"] = (
+        mix["fuel_type"]
+        + " · "
+        + (
+            mix["share"]
+            * 100
+        ).round(0).astype(int).astype(str)
+        + "%"
+    )
+
+    scale = _fuel_scale(
+        mix["fuel_type"]
+    )
+
+    doughnut = (
+        alt.Chart(mix)
+        .mark_arc(
+            innerRadius=78,
+            outerRadius=130,
+            stroke="white",
+            strokeWidth=1,
+        )
+        .encode(
+            theta=alt.Theta(
+                "generation_gw:Q",
+            ),
+            color=alt.Color(
+                "fuel_type:N",
+                title="Fuel",
+                scale=scale,
+                sort=(
+                    mix[
+                        "fuel_type"
+                    ].tolist()
+                ),
+            ),
+            order=alt.Order(
+                "generation_gw:Q",
+                sort="descending",
+            ),
+            tooltip=[
+                alt.Tooltip(
+                    "fuel_type:N",
+                    title="Fuel",
+                ),
+                alt.Tooltip(
+                    "generation_gw:Q",
+                    title="Generation",
+                    format=".2f",
+                ),
+                alt.Tooltip(
+                    "share:Q",
+                    title="Share",
+                    format=".1%",
+                ),
+            ],
+        )
+    )
+
+    outside_labels = (
+        alt.Chart(mix)
+        .mark_text(
+            radius=158,
+            fontSize=11,
+        )
+        .encode(
+            theta=alt.Theta(
+                "generation_gw:Q",
+                stack=True,
+            ),
+            text="label:N",
+            color=alt.Color(
+                "fuel_type:N",
+                scale=scale,
+                legend=None,
+            ),
+        )
+    )
+
+    centre = (
+        alt.Chart(
+            pd.DataFrame(
+                {
+                    "value": [
+                        f"{total_gw:.1f} GW"
+                    ],
+                    "caption": [
+                        "tracked output"
+                    ],
+                }
+            )
+        )
+        .mark_text(
+            fontSize=24,
+            fontWeight="bold",
+            dy=-8,
+        )
+        .encode(
+            text="value:N"
+        )
+    )
+
+    centre_caption = (
+        alt.Chart(
+            pd.DataFrame(
+                {
+                    "caption": [
+                        "tracked output"
+                    ]
+                }
+            )
+        )
+        .mark_text(
+            fontSize=11,
+            dy=18,
+        )
+        .encode(
+            text="caption:N"
+        )
+    )
+
+    local_time = (
+        latest_time.tz_convert(
+            "Europe/London"
+        )
+    )
+
+    return (
+        doughnut
+        + outside_labels
+        + centre
+        + centre_caption
+    ).properties(
+        title=(
+            "Current generation mix · "
+            f"{local_time.strftime('%d %b · %H:%M %Z')}"
+        ),
+        height=360,
+    )
+
+
+def build_generation_change_dashboard(
+    generation: pd.DataFrame,
+    lookback_hours: int = 4,
+    top_n: int = 8,
+) -> alt.TopLevelMixin:
+    """
+    Biggest generation movements over the lookback period.
+
+    Direction is already encoded by the zero baseline, so colour is used
+    for movement strength rather than increase/decrease.
+    """
+    wide = generation.copy()
+
+    if "event_time_utc" not in wide.columns:
+        wide = wide.reset_index()
+
+    _require_columns(
+        wide,
+        ["event_time_utc"],
+        "Generation movement",
+    )
+
+    wide["event_time_utc"] = pd.to_datetime(
+        wide["event_time_utc"],
+        utc=True,
+    )
+
+    wide = wide.sort_values(
+        "event_time_utc"
+    )
+
+    latest_time = wide[
+        "event_time_utc"
+    ].max()
+
+    earlier = wide[
+        wide["event_time_utc"]
+        <= (
+            latest_time
+            - pd.Timedelta(
+                hours=lookback_hours
+            )
+        )
+    ]
+
+    if earlier.empty:
+        raise ValueError(
+            "Not enough generation history "
+            "for movement chart."
+        )
+
+    latest_row = wide.iloc[-1]
+    earlier_row = earlier.iloc[-1]
+
+    rows = []
+
+    for fuel in [
+        column
+        for column in wide.columns
+        if column
+        != "event_time_utc"
+    ]:
+        latest_value = (
+            latest_row[fuel]
+        )
+
+        earlier_value = (
+            earlier_row[fuel]
+        )
+
+        if (
+            pd.isna(latest_value)
+            or pd.isna(
+                earlier_value
+            )
+        ):
+            continue
+
+        delta_gw = (
+            float(latest_value)
+            - float(earlier_value)
+        ) / 1000
+
+        rows.append(
+            {
+                "fuel_type": fuel,
+                "delta_gw": delta_gw,
+                "absolute_change": abs(
+                    delta_gw
+                ),
+            }
+        )
+
+    movement = (
+        pd.DataFrame(rows)
+        .sort_values(
+            "absolute_change",
+            ascending=False,
+        )
+        .head(top_n)
+    )
+
+    if movement.empty:
+        raise ValueError(
+            "No generation movements available."
+        )
+
+    max_change = (
+        movement[
+            "absolute_change"
+        ].max()
+    )
+
+    movement["movement_strength"] = (
+        movement[
+            "absolute_change"
+        ]
+        / max_change
+        if max_change
+        else 0
+    )
+
+    zero = (
+        alt.Chart(
+            pd.DataFrame(
+                {
+                    "zero": [0]
+                }
+            )
+        )
+        .mark_rule(
+            strokeWidth=1,
+        )
+        .encode(
+            x="zero:Q"
+        )
+    )
+
+    bars = (
+        alt.Chart(movement)
+        .mark_bar()
+        .encode(
+            x=alt.X(
+                "delta_gw:Q",
+                title=(
+                    f"Change over "
+                    f"{lookback_hours} hours (GW)"
+                ),
+            ),
+            y=alt.Y(
+                "fuel_type:N",
+                title=None,
+                sort="-x",
+            ),
+            color=alt.Color(
+                "movement_strength:Q",
+                title="Movement strength",
+                scale=alt.Scale(
+                    scheme="oranges",
+                ),
+            ),
+            tooltip=[
+                alt.Tooltip(
+                    "fuel_type:N",
+                    title="Fuel",
+                ),
+                alt.Tooltip(
+                    "delta_gw:Q",
+                    title="Change",
+                    format="+.2f",
+                ),
+            ],
+        )
+    )
+
+    return (
+        bars
+        + zero
+    ).properties(
+        title=(
+            "Biggest generation movements"
+        ),
+        height=330,
+    )
+
+
+def build_model_vs_persistence_vertical(
+    predictions: pd.DataFrame,
+    baseline_col: str | None = None,
+) -> alt.TopLevelMixin:
+    """
+    Vertical comparison requested during concept review.
+
+    Starts the y-axis close to the observed MAE range instead of at zero so
+    the model improvement is visually legible. Exact values remain in labels.
+    """
+    _require_columns(
+        predictions,
+        [
+            "target_drm_mw",
+            "predicted_drm_mw",
+        ],
+        "Model-vs-persistence",
+    )
+
+    if baseline_col is None:
+        baseline_col = (
+            _find_baseline_column(
+                predictions
+            )
+        )
+
+    _require_columns(
+        predictions,
+        [baseline_col],
+        "Model-vs-persistence",
+    )
+
+    data = predictions[
+        [
+            "target_drm_mw",
+            "predicted_drm_mw",
+            baseline_col,
+        ]
+    ].dropna().copy()
+
+    data["model_abs_error_mw"] = (
+        data["predicted_drm_mw"]
+        - data["target_drm_mw"]
+    ).abs()
+
+    data["baseline_abs_error_mw"] = (
+        data[baseline_col]
+        - data["target_drm_mw"]
+    ).abs()
+
+    threshold = (
+        data[
+            "target_drm_mw"
+        ].quantile(
+            0.10
+        )
+    )
+
+    rows = []
+
+    for label, segment in [
+        (
+            "Overall",
+            data,
+        ),
+        (
+            "Lowest 10% DRM",
+            data[
+                data[
+                    "target_drm_mw"
+                ]
+                <= threshold
+            ],
+        ),
+    ]:
+        if segment.empty:
+            continue
+
+        rows.extend(
+            [
+                {
+                    "segment": label,
+                    "method": "Persistence",
+                    "mae_gw": (
+                        segment[
+                            "baseline_abs_error_mw"
+                        ].mean()
+                        / 1000
+                    ),
+                },
+                {
+                    "segment": label,
+                    "method": "Ridge",
+                    "mae_gw": (
+                        segment[
+                            "model_abs_error_mw"
+                        ].mean()
+                        / 1000
+                    ),
+                },
+            ]
+        )
+
+    compare = pd.DataFrame(
+        rows
+    )
+
+    minimum = float(
+        compare["mae_gw"].min()
+    )
+
+    maximum = float(
+        compare["mae_gw"].max()
+    )
+
+    padding = max(
+        (
+            maximum
+            - minimum
+        )
+        * 0.35,
+        0.35,
+    )
+
+    lower_bound = max(
+        0,
+        minimum - padding,
+    )
+
+    upper_bound = (
+        maximum
+        + padding
+    )
+
+    lines = (
+        alt.Chart(compare)
+        .mark_line(
+            strokeWidth=4,
+        )
+        .encode(
+            x=alt.X(
+                "segment:N",
+                title=None,
+                sort=[
+                    "Overall",
+                    "Lowest 10% DRM",
+                ],
+            ),
+            y=alt.Y(
+                "mae_gw:Q",
+                title="Mean absolute error (GW)",
+                scale=alt.Scale(
+                    domain=[
+                        lower_bound,
+                        upper_bound,
+                    ],
+                    zero=False,
+                ),
+            ),
+            detail="method:N",
+            color=alt.Color(
+                "method:N",
+                title=None,
+            ),
+        )
+    )
+
+    points = (
+        alt.Chart(compare)
+        .mark_point(
+            filled=True,
+            size=180,
+        )
+        .encode(
+            x=alt.X(
+                "segment:N",
+                sort=[
+                    "Overall",
+                    "Lowest 10% DRM",
+                ],
+            ),
+            y="mae_gw:Q",
+            color=alt.Color(
+                "method:N",
+                title=None,
+            ),
+            tooltip=[
+                "segment:N",
+                "method:N",
+                alt.Tooltip(
+                    "mae_gw:Q",
+                    title="MAE",
+                    format=".2f",
+                ),
+            ],
+        )
+    )
+
+    labels = (
+        alt.Chart(compare)
+        .mark_text(
+            dy=-14,
+            fontSize=12,
+        )
+        .encode(
+            x=alt.X(
+                "segment:N",
+                sort=[
+                    "Overall",
+                    "Lowest 10% DRM",
+                ],
+            ),
+            y="mae_gw:Q",
+            text=alt.Text(
+                "mae_gw:Q",
+                format=".2f",
+            ),
+            color=alt.Color(
+                "method:N",
+                legend=None,
+            ),
+        )
+    )
+
+    return (
+        lines
+        + points
+        + labels
+    ).properties(
+        title=(
+            "Ridge vs persistence · lower is better"
+        ),
+        height=300,
+    )
+
+
+def build_typical_day_demand_dashboard(
+    demand_history: pd.DataFrame,
+) -> alt.TopLevelMixin:
+    """
+    Dashboard version of the typical-day concept.
+
+    The legend explicitly distinguishes the latest profile from the
+    historical median, while a light IQR band shows the typical range.
+    """
+    _require_columns(
+        demand_history,
+        [
+            "event_time_utc",
+            "demand_mw",
+        ],
+        "Typical-day demand",
+    )
+
+    data = demand_history[
+        [
+            "event_time_utc",
+            "demand_mw",
+        ]
+    ].dropna().copy()
+
+    data["event_time_utc"] = pd.to_datetime(
+        data["event_time_utc"],
+        utc=True,
+    )
+
+    local = data[
+        "event_time_utc"
+    ].dt.tz_convert(
+        "Europe/London"
+    )
+
+    data["local_date"] = (
+        local.dt.date
+    )
+
+    data["settlement_slot"] = (
+        local.dt.hour * 2
+        + local.dt.minute // 30
+        + 1
+    )
+
+    data["demand_gw"] = (
+        data["demand_mw"]
+        / 1000
+    )
+
+    latest_date = data[
+        "local_date"
+    ].max()
+
+    reference = data[
+        data["local_date"]
+        < latest_date
+    ]
+
+    if reference.empty:
+        raise ValueError(
+            "Typical-day demand needs at least "
+            "one earlier local day for comparison."
+        )
+
+    typical = (
+        reference.groupby(
+            "settlement_slot"
+        )["demand_gw"]
+        .agg(
+            q25=lambda values: (
+                values.quantile(
+                    0.25
+                )
+            ),
+            median="median",
+            q75=lambda values: (
+                values.quantile(
+                    0.75
+                )
+            ),
+        )
+        .reset_index()
+    )
+
+    latest = data[
+        data["local_date"]
+        == latest_date
+    ][
+        [
+            "settlement_slot",
+            "demand_gw",
+        ]
+    ].copy()
+
+    line_data = pd.concat(
+        [
+            typical[
+                [
+                    "settlement_slot",
+                    "median",
+                ]
+            ].rename(
+                columns={
+                    "median":
+                        "demand_gw"
+                }
+            ).assign(
+                series=(
+                    "Historical median"
+                )
+            ),
+
+            latest.assign(
+                series=(
+                    "Latest profile"
+                )
+            ),
+        ],
+        ignore_index=True,
+    )
+
+    band = (
+        alt.Chart(typical)
+        .mark_area(
+            opacity=0.18,
+            color="#9E9E9E",
+        )
+        .encode(
+            x=alt.X(
+                "settlement_slot:Q",
+                title="Settlement period",
+                scale=alt.Scale(
+                    domain=[
+                        1,
+                        48,
+                    ]
+                ),
+            ),
+            y=alt.Y(
+                "q25:Q",
+                title="Demand (GW)",
+                scale=alt.Scale(
+                    zero=False,
+                ),
+            ),
+            y2="q75:Q",
+            tooltip=[
+                alt.Tooltip(
+                    "settlement_slot:Q",
+                    title="Settlement period",
+                ),
+                alt.Tooltip(
+                    "q25:Q",
+                    title="25th percentile",
+                    format=".1f",
+                ),
+                alt.Tooltip(
+                    "q75:Q",
+                    title="75th percentile",
+                    format=".1f",
+                ),
+            ],
+        )
+    )
+
+    lines = (
+        alt.Chart(line_data)
+        .mark_line(
+            strokeWidth=3,
+        )
+        .encode(
+            x=alt.X(
+                "settlement_slot:Q",
+                title="Settlement period",
+            ),
+            y=alt.Y(
+                "demand_gw:Q",
+                title="Demand (GW)",
+            ),
+            color=alt.Color(
+                "series:N",
+                title=None,
+                scale=alt.Scale(
+                    domain=[
+                        "Latest profile",
+                        "Historical median",
+                    ],
+                    range=[
+                        "#4E79A7",
+                        "#666666",
+                    ],
+                ),
+            ),
+            strokeDash=alt.StrokeDash(
+                "series:N",
+                title=None,
+                scale=alt.Scale(
+                    domain=[
+                        "Latest profile",
+                        "Historical median",
+                    ],
+                    range=[
+                        [1, 0],
+                        [6, 4],
+                    ],
+                ),
+            ),
+            tooltip=[
+                "series:N",
+                alt.Tooltip(
+                    "settlement_slot:Q",
+                    title="Settlement period",
+                ),
+                alt.Tooltip(
+                    "demand_gw:Q",
+                    title="Demand",
+                    format=".1f",
+                ),
+            ],
+        )
+    )
+
+    return (
+        band
+        + lines
+    ).properties(
+        title=(
+            "Latest demand profile "
+            "vs historical typical range"
+        ),
+        height=320,
+    )
+

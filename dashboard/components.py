@@ -1,37 +1,53 @@
-import altair as alt
 import pandas as pd
 import streamlit as st
+
+from dashboard.graphs import (
+    build_demand_settlement_bars,
+    build_drm_change_bridge,
+    build_forecast_graphs,
+    build_generation_change_dashboard,
+    build_generation_doughnut_dashboard,
+    build_margin_graphs,
+    build_model_vs_persistence_vertical,
+    build_typical_day_demand_dashboard,
+    build_validation_graphs,
+)
 
 
 def calculate_margin_percentile(
     predicted_drm_mw: float,
     history: pd.Series,
 ) -> float:
-    if history.empty:
+    clean = pd.to_numeric(
+        history,
+        errors="coerce",
+    ).dropna()
+
+    if clean.empty:
         return 50.0
 
-    percentile = (
-        (history < predicted_drm_mw)
-        .mean()
+    return float(
+        (
+            clean
+            < predicted_drm_mw
+        ).mean()
         * 100
     )
-
-    return float(percentile)
 
 
 def describe_margin_percentile(
     percentile: float,
 ) -> str:
     if percentile <= 10:
-        return "Historically tight"
+        return "historically tight"
 
     if percentile <= 25:
-        return "Below typical"
+        return "below the typical historical range"
 
     if percentile <= 75:
-        return "Typical"
+        return "around the typical historical range"
 
-    return "High margin"
+    return "high relative to historical margins"
 
 
 def render_forecast_hero(
@@ -43,250 +59,169 @@ def render_forecast_hero(
         "## 24-hour-ahead forecast"
     )
 
-    if forecast is None:
+    if (
+        forecast is None
+        or margin.empty
+    ):
         st.info(
-            "Forecast generation is not connected yet."
+            "A saved forecast is not currently available."
         )
         return
 
-    predicted_drm_mw = float(
-        forecast["predicted_drm_mw"]
+    predicted = float(
+        forecast[
+            "predicted_drm_mw"
+        ]
     )
 
-    forecast_origin = pd.Timestamp(
-        forecast["forecast_origin_utc"]
+    target = pd.Timestamp(
+        forecast[
+            "target_time_utc"
+        ]
     )
 
-    target_time = pd.Timestamp(
-        forecast["target_time_utc"]
-    )
-
-    if forecast_origin.tzinfo is None:
-        forecast_origin = (
-            forecast_origin.tz_localize("UTC")
-        )
-
-    if target_time.tzinfo is None:
-        target_time = (
-            target_time.tz_localize("UTC")
-        )
-
-    latest_margin_mw = float(
-        margin.iloc[-1]["derated_margin_mw"]
-    )
-
-    percentile = calculate_margin_percentile(
-        predicted_drm_mw,
-        margin_history,
-    )
-
-    description = describe_margin_percentile(
-        percentile
-    )
-
-    change_mw = (
-        predicted_drm_mw
-        - latest_margin_mw
-    )
-
-    # ----------------------------------------------
-    # Headline metrics
-    # ----------------------------------------------
-
-    forecast_col, position_col, change_col = (
-        st.columns([2, 1, 1])
-    )
-
-    forecast_col.metric(
-        "Predicted de-rated margin",
-        f"{predicted_drm_mw / 1000:.1f} GW",
-    )
-
-    position_col.metric(
-        "Historical position",
-        f"{percentile:.0f}th percentile",
-    )
-
-    change_col.metric(
-        "Vs latest margin",
-        f"{change_mw / 1000:+.1f} GW",
-    )
-
-    st.caption(
-        f"{description} · "
-        f"Forecast for "
-        f"{target_time.tz_convert('Europe/London').strftime('%d %b %Y · %H:%M %Z')}"
-    )
-
-    # ----------------------------------------------
-    # Recent actual DRM
-    # ----------------------------------------------
-
-    recent = margin.copy()
-
-    recent = recent[
-        recent["event_time_utc"]
-        >= (
-            forecast_origin
-            - pd.Timedelta(hours=48)
-        )
-    ].copy()
-
-    recent["drm_gw"] = (
-        recent["derated_margin_mw"]
-        / 1000
-    )
-
-    # ----------------------------------------------
-    # Forecast point
-    # ----------------------------------------------
-
-    forecast_point = pd.DataFrame(
-        {
-            "event_time_utc": [
-                target_time
-            ],
-            "drm_gw": [
-                predicted_drm_mw / 1000
-            ],
-            "label": [
-                f"{predicted_drm_mw / 1000:.1f} GW"
-            ],
-        }
-    )
-
-    # ----------------------------------------------
-    # Actual history line
-    # ----------------------------------------------
-
-    history_line = (
-        alt.Chart(recent)
-        .mark_line(
-            strokeWidth=2,
-        )
-        .encode(
-            x=alt.X(
-                "event_time_utc:T",
-                title=None,
-            ),
-            y=alt.Y(
-                "drm_gw:Q",
-                title="De-rated margin (GW)",
-                scale=alt.Scale(
-                    zero=False,
-                ),
-            ),
-            tooltip=[
-                alt.Tooltip(
-                    "event_time_utc:T",
-                    title="Time",
-                ),
-                alt.Tooltip(
-                    "drm_gw:Q",
-                    title="DRM",
-                    format=".1f",
-                ),
-            ],
-        )
-    )
-
-    # ----------------------------------------------
-    # Forecast marker
-    # ----------------------------------------------
-
-    forecast_dot = (
-        alt.Chart(forecast_point)
-        .mark_point(
-            filled=True,
-            size=180,
-        )
-        .encode(
-            x="event_time_utc:T",
-            y="drm_gw:Q",
-            tooltip=[
-                alt.Tooltip(
-                    "event_time_utc:T",
-                    title="Forecast target",
-                ),
-                alt.Tooltip(
-                    "drm_gw:Q",
-                    title="Predicted DRM",
-                    format=".1f",
-                ),
-            ],
-        )
-    )
-
-    forecast_label = (
-        alt.Chart(forecast_point)
-        .mark_text(
-            align="left",
-            dx=12,
-            dy=-12,
-            fontSize=14,
-            fontWeight="bold",
-        )
-        .encode(
-            x="event_time_utc:T",
-            y="drm_gw:Q",
-            text="label:N",
-        )
-    )
-
-    # ----------------------------------------------
-    # Dashed forecast-target marker
-    # ----------------------------------------------
-
-    target_rule = (
-        alt.Chart(
-            pd.DataFrame(
-                {
-                    "event_time_utc": [
-                        target_time
-                    ]
-                }
+    if target.tzinfo is None:
+        target = (
+            target.tz_localize(
+                "UTC"
             )
         )
-        .mark_rule(
-            strokeDash=[5, 5],
-        )
-        .encode(
-            x="event_time_utc:T"
+
+    latest = float(
+        margin.iloc[-1][
+            "derated_margin_mw"
+        ]
+    )
+
+    change = (
+        predicted
+        - latest
+    )
+
+    percentile = (
+        calculate_margin_percentile(
+            predicted,
+            margin_history,
         )
     )
 
-    chart = (
-        history_line
-        + target_rule
-        + forecast_dot
-        + forecast_label
-    ).properties(
-        height=320,
-    ).interactive()
+    description = (
+        describe_margin_percentile(
+            percentile
+        )
+    )
+
+    headline, bridge = (
+        st.columns(
+            [1.15, 1]
+        )
+    )
+
+    with headline:
+        st.metric(
+            "Predicted de-rated margin",
+            f"{predicted / 1000:.1f} GW",
+            delta=(
+                f"{change / 1000:+.1f} GW "
+                "vs latest"
+            ),
+        )
+
+        local_target = (
+            target.tz_convert(
+                "Europe/London"
+            )
+        )
+
+        st.markdown(
+            f"**Forecast for "
+            f"{local_target.strftime('%d %b %Y · %H:%M %Z')}**"
+        )
+
+        st.caption(
+            f"This forecast is higher than "
+            f"{percentile:.0f}% of historical DRM observations "
+            f"and is {description}."
+        )
+
+    with bridge:
+        st.altair_chart(
+            build_drm_change_bridge(
+                forecast
+            ),
+            width="stretch",
+        )
+
+    forecast_chart = (
+        build_forecast_graphs(
+            recent_margin=margin,
+            forecast=forecast,
+        )[
+            "history_and_forecast"
+        ]
+    )
 
     st.altair_chart(
-        chart,
+        forecast_chart,
         width="stretch",
     )
 
     st.caption(
-        "Solid line: recently published DRM · "
-        "Dot: model prediction exactly 24 hours ahead"
+        "Solid line = recent published DRM · "
+        "dashed boundary / point = the model's "
+        "single prediction exactly 24 hours ahead."
     )
 
 
 def render_grid_context(
     margin: pd.DataFrame,
     demand: pd.DataFrame,
+    generation: pd.DataFrame,
 ) -> None:
     st.markdown(
         "## Current grid context"
     )
 
-    latest_margin = margin.iloc[-1]
-    latest_demand = demand.iloc[-1]
+    if (
+        margin.empty
+        or demand.empty
+    ):
+        st.info(
+            "Current grid context is unavailable."
+        )
+        return
 
-    columns = st.columns(3)
+    latest_margin = (
+        margin.iloc[-1]
+    )
+
+    latest_demand = (
+        demand.dropna(
+            subset=[
+                "demand_mw"
+            ]
+        ).iloc[-1]
+    )
+
+    total_generation = None
+
+    if not generation.empty:
+        latest_generation = (
+            generation.iloc[-1]
+        )
+
+        positive = (
+            latest_generation[
+                latest_generation > 0
+            ]
+        )
+
+        total_generation = (
+            positive.sum()
+            / 1000
+        )
+
+    columns = st.columns(4)
 
     columns[0].metric(
         "Current DRM",
@@ -305,17 +240,164 @@ def render_grid_context(
     )
 
     columns[2].metric(
-        "Data updated",
+        "Tracked generation",
+        (
+            f"{total_generation:.1f} GW"
+            if total_generation is not None
+            else "—"
+        ),
+    )
+
+    latest_time = pd.Timestamp(
         latest_margin[
             "event_time_utc"
-        ].strftime(
+        ]
+    )
+
+    columns[3].metric(
+        "Data updated",
+        latest_time.strftime(
             "%d %b · %H:%M UTC"
         ),
     )
 
+    age = (
+        pd.Timestamp.now(
+            tz="UTC"
+        )
+        - latest_time
+    )
+
+    if age > pd.Timedelta(
+        minutes=90
+    ):
+        st.warning(
+            "The local dataset is stale. "
+            "The dashboard is serving the latest cached values."
+        )
+
+
+def render_recent_grid_history(
+    margin: pd.DataFrame,
+    demand: pd.DataFrame,
+) -> None:
+    st.markdown(
+        "## Recent grid history"
+    )
+
+    left, right = st.columns(2)
+
+    with left:
+        margin_chart = (
+            build_margin_graphs(
+                margin
+            )[
+                "line"
+            ]
+        )
+
+        st.altair_chart(
+            margin_chart,
+            width="stretch",
+        )
+
+    with right:
+        st.altair_chart(
+            build_demand_settlement_bars(
+                demand
+            ),
+            width="stretch",
+        )
+
+        st.caption(
+            "Amber bars are display-only linear estimates "
+            "for internal missing settlement periods. "
+            "They are never written back into the model data."
+        )
+
+
+def render_demand_context(
+    demand_history: pd.DataFrame,
+) -> None:
+    st.markdown(
+        "### Demand vs a typical day"
+    )
+
+    try:
+        chart = (
+            build_typical_day_demand_dashboard(
+                demand_history
+            )
+        )
+    except ValueError as exc:
+        st.info(
+            str(exc)
+        )
+        return
+
+    st.altair_chart(
+        chart,
+        width="stretch",
+    )
+
+    st.caption(
+        "The latest local-day profile is compared with "
+        "the historical median and interquartile range "
+        "for each half-hour settlement period."
+    )
+
+
+def render_generation_section(
+    generation: pd.DataFrame,
+) -> None:
+    st.markdown(
+        "## Generation"
+    )
+
+    if generation.empty:
+        st.info(
+            "Generation data is unavailable."
+        )
+        return
+
+    mix, movement = (
+        st.columns(
+            [1, 1.15]
+        )
+    )
+
+    with mix:
+        st.altair_chart(
+            build_generation_doughnut_dashboard(
+                generation
+            ),
+            width="stretch",
+        )
+
+        st.caption(
+            "Small positive contributors are grouped into Other. "
+            "Negative interconnector / storage flows are not represented "
+            "as doughnut slices."
+        )
+
+    with movement:
+        st.altair_chart(
+            build_generation_change_dashboard(
+                generation,
+                lookback_hours=4,
+            ),
+            width="stretch",
+        )
+
+        st.caption(
+            "Direction is shown by which side of zero the bar reaches; "
+            "colour intensity represents movement strength."
+        )
+
 
 def render_model_performance(
     metrics: dict,
+    predictions: pd.DataFrame,
 ) -> None:
     st.markdown(
         "## Model validation"
@@ -325,7 +407,6 @@ def render_model_performance(
         st.info(
             "Final model metrics are unavailable."
         )
-
         return
 
     columns = st.columns(3)
@@ -348,8 +429,63 @@ def render_model_performance(
 
     columns[2].metric(
         "MAE improvement",
-        f"{metrics['mae_improvement_pct']:.2f}%",
+        (
+            f"{metrics['mae_improvement_pct']:.2f}%"
+        ),
     )
+
+    if predictions.empty:
+        st.caption(
+            "Final holdout · Ridge Regression · "
+            "alpha=350 · 24-hour horizon"
+        )
+        return
+
+    left, right = (
+        st.columns(2)
+    )
+
+    with left:
+        residuals = (
+            build_validation_graphs(
+                predictions
+            )[
+                "residuals"
+            ]
+        )
+
+        st.altair_chart(
+            residuals,
+            width="stretch",
+        )
+
+        st.caption(
+            "Residuals show when the model predicted DRM "
+            "too high or too low over time."
+        )
+
+    with right:
+        try:
+            comparison = (
+                build_model_vs_persistence_vertical(
+                    predictions
+                )
+            )
+
+            st.altair_chart(
+                comparison,
+                width="stretch",
+            )
+        except ValueError as exc:
+            st.info(
+                str(exc)
+            )
+
+        st.caption(
+            "Lower MAE is better. The y-axis is intentionally "
+            "focused on the observed error range so the improvement "
+            "is legible; exact values are labelled."
+        )
 
     st.caption(
         "Final holdout · Ridge Regression · "

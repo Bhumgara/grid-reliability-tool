@@ -1,9 +1,12 @@
 import streamlit as st
 
 from dashboard.components import (
+    render_demand_context,
     render_forecast_hero,
+    render_generation_section,
     render_grid_context,
     render_model_performance,
+    render_recent_grid_history,
 )
 from dashboard.data import (
     load_latest_forecast,
@@ -12,12 +15,17 @@ from dashboard.data import (
     load_recent_demand,
     load_recent_generation,
     load_recent_margin,
+    load_validation_predictions,
 )
-from dashboard.styles import apply_styles
+from dashboard.styles import (
+    apply_styles,
+)
 
 
 st.set_page_config(
-    page_title="UK Energy Reliability Tool",
+    page_title=(
+        "UK Energy Reliability Tool"
+    ),
     page_icon="⚡",
     layout="wide",
 )
@@ -36,6 +44,7 @@ st.caption(
 )
 
 
+# Short windows for the main dashboard.
 margin = load_recent_margin(
     days=7,
 )
@@ -44,19 +53,38 @@ demand = load_recent_demand(
     days=7,
 )
 
-generation = load_recent_generation(
-    days=7,
+generation = (
+    load_recent_generation(
+        days=7,
+    )
 )
 
-margin_history = load_margin_history()
+# Longer demand history supports the typical-day comparison.
+demand_history = (
+    load_recent_demand(
+        days=90,
+    )
+)
 
-metrics = load_model_metrics()
+margin_history = (
+    load_margin_history()
+)
 
-forecast = load_latest_forecast()
+metrics = (
+    load_model_metrics()
+)
+
+forecast = (
+    load_latest_forecast()
+)
+
+predictions = (
+    load_validation_predictions()
+)
 
 
 # ==================================================
-# Forecast
+# What do we expect?
 # ==================================================
 
 render_forecast_hero(
@@ -67,70 +95,39 @@ render_forecast_hero(
 
 
 # ==================================================
-# Current grid context
+# What is happening now?
 # ==================================================
 
 render_grid_context(
-    margin,
-    demand,
+    margin=margin,
+    demand=demand,
+    generation=generation,
 )
 
 
 # ==================================================
-# Recent history
+# What has been happening?
 # ==================================================
 
-st.markdown(
-    "## Recent grid history"
+render_recent_grid_history(
+    margin=margin,
+    demand=demand,
 )
 
-left, right = st.columns(2)
-
-
-with left:
-    st.markdown(
-        "### De-rated margin"
-    )
-
-    st.line_chart(
-        margin.set_index(
-            "event_time_utc"
-        )[
-            ["derated_margin_mw"]
-        ],
-        y_label="DRM (MW)",
-    )
-
-
-with right:
-    st.markdown(
-        "### Electricity demand"
-    )
-
-    st.line_chart(
-        demand.set_index(
-            "event_time_utc"
-        )[
-            ["demand_mw"]
-        ],
-        y_label="Demand (MW)",
-    )
-
-
-st.markdown(
-    "### Generation by fuel"
+render_demand_context(
+    demand_history=demand_history,
 )
 
-st.line_chart(
-    generation,
-    y_label="Generation (MW)",
+render_generation_section(
+    generation=generation,
 )
 
 
 # ==================================================
-# Model validation
+# How good is the model?
 # ==================================================
 
 render_model_performance(
-    metrics
+    metrics=metrics,
+    predictions=predictions,
 )
