@@ -20,12 +20,20 @@ FUEL_LABELS = {
     "NUCLEAR": "Nuclear",
     "BIOMASS": "Biomass",
     "NPSHYD": "Hydro",
+    "PS": "Pumped storage",
+
+    "INTFR": "France · IFA",
+    "INTIFA2": "France · IFA2",
+    "INTELEC": "France · ElecLink",
 
     "INTVKL": "Denmark Link",
     "INTNED": "Netherlands Link",
     "INTNSL": "Norway Link",
-    "INTIFA2": "France Link 1",
-    "INTELEC": "France Link 2",
+    "INTNEM": "Belgium Link",
+
+    "INTIRL": "Ireland · Moyle",
+    "INTEW": "Ireland · East-West",
+    "INTGRNL": "Ireland · Greenlink",
 
     "OTHER": "Other",
 }
