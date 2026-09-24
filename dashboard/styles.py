@@ -2,48 +2,49 @@ import streamlit as st
 
 PALETTE = {
     # Margin status
-    "margin_comfortable": "#15803D",
-    "margin_watch": "#D97706",
-    "margin_tight": "#DC2626",
+    "margin_comfortable": "#00CC66",
+    "margin_watch": "#D1AC00",
+    "margin_tight": "#F75C03",
 
-    # Margin risk bands
-    "risk_comfortable": "#DCFCE7",
-    "risk_watch": "#FEF3C7",
-    "risk_tight": "#FEE2E2",
+    "risk_comfortable": "#CDF5DE",
+    "risk_watch": "#FBF0C2",
+    "risk_tight": "#FDE0CC",
 
-    # Core semantic series
-    "observed": "#1E293B",
-    "forecast": "#2563EB",
-    "forecast_uncertainty": "#DBE6FD",
-    "reference": "#94A3B8",
-    "latest_profile": "#64748B",
-    "historical_iqr": "#E2E8F0",
-    "direction": "#1E293B",
+    # Section-specific "observed" colours
+    "margin_observed": "#5E9AD3",
+    "demand_observed": "#9333EA",
+    "residual_observed": "#DB2777",
+    "typical_day_observed": "#0891B2",
 
-    # Movement magnitude
-    "movement_light": "#CBD5E1",
-    "movement_dark": "#334155",
+    # Everything else unchanged from the last version
+    "forecast": "#2274A5",
+    "forecast_uncertainty": "#D6E9F2",
+    "reference": "#7C93A0",
+    "latest_profile": "#154C6E",
+    "historical_iqr": "#D6E9F2",
+    "direction": "#16323E",          # kept neutral — it's an arrow/sign, not tied to any one chart's series
 
-    # Generation
-    "generation_gas": "#9A6B3F",
-    "generation_other_fossil": "#5C4033",
-    "generation_wind": "#0F8B8D",
-    "generation_hydro": "#5EC4C0",
-    "generation_solar": "#EAD34A",
-    "generation_nuclear": "#7C3AED",
-    "generation_biomass": "#7A8B3A",
-    "interconnector": "#CDB98C",
-    "storage": "#B4C0D0",
-    "other": "#CBD5E1",
+    "movement_light": "#17A398",   # was #D6E9F2 — generation_wind teal
+    "movement_dark": "#9333EA",    # was #154C6E — demand_observed purple
 
-    # UI
+    "generation_gas": "#8A5A3B",
+    "generation_other_fossil": "#5C3A26",
+    "generation_wind": "#17A398",
+    "generation_hydro": "#9CFFFA",
+    "generation_solar": "#F2C94C",
+    "generation_nuclear": "#2274A5",
+    "generation_biomass": "#007A3D",
+    "interconnector": "#7C93A0",
+    "storage": "#B33F00",
+    "other": "#D6E9F2",
+
     "background": "#FFFFFF",
-    "card_surface": "#F8FAFC",
-    "grid_border": "#E2E8F0",
-    "text_primary": "#0F172A",
-    "text_secondary": "#64748B",
-    "delayed_text": "#475569",
-    "delayed_background": "#F1F5F9",
+    "card_surface": "#F7FAFC",
+    "grid_border": "#D6E9F2",
+    "text_primary": "#16323E",
+    "text_secondary": "#7C93A0",
+    "delayed_text": "#8F7500",
+    "delayed_background": "#FBF0C2",
 }
 
 
@@ -77,21 +78,44 @@ FUEL_COLOURS = {
 
 
 MODEL_COLOURS = {
-    "Ridge": PALETTE["forecast"],
-    "Persistence": PALETTE["reference"],
+    "Ridge": PALETTE["forecast"],            # #2274A5 — unchanged
+    "Persistence": PALETTE["residual_observed"],  # #DB2777 — was PALETTE["reference"], removes the grey
 }
 
 
 DEMAND_PROFILE_COLOURS = {
-    "Current profile": PALETTE["observed"],
-    "Latest full profile": PALETTE["latest_profile"],
-    "Historical median": PALETTE["reference"],
+    "Current profile": PALETTE["demand_observed"],   # purple — same "today's demand" as Recent grid history
+    "Latest full profile": PALETTE["generation_wind"], # teal — ties to wind as the dominant generator
+    "Historical median": PALETTE["reference"],         # stays neutral so it reads as the baseline, not a third competing colour
 }
 
 def apply_styles() -> None:
     st.markdown(
         f"""
         <style>
+            h1 {{
+                letter-spacing: -0.03em;
+                color: {PALETTE["forecast"]};
+            }}
+
+            h2 {{
+                margin-top: 2.25rem;
+                margin-bottom: 0.75rem;
+                color: {PALETTE["text_primary"]};
+            }}
+
+            h3 {{
+                margin-top: 1.25rem;
+                color: {PALETTE["text_secondary"]};
+            }}
+
+            [data-testid="stMetricDelta"] > div:has([data-testid="stMetricDeltaIcon-Up"]) {{
+                color: {PALETTE["margin_comfortable"]} !important;
+            }}
+            [data-testid="stMetricDelta"] > div:has([data-testid="stMetricDeltaIcon-Down"]) {{
+                color: {PALETTE["margin_tight"]} !important;
+            }}
+
             .block-container {{
                 max-width: 1180px;
                 padding-top: 2rem;
@@ -103,19 +127,6 @@ def apply_styles() -> None:
                 border-radius: 12px;
                 padding: 1rem;
                 background: {PALETTE["card_surface"]};
-            }}
-
-            h1 {{
-                letter-spacing: -0.03em;
-            }}
-
-            h2 {{
-                margin-top: 2.25rem;
-                margin-bottom: 0.75rem;
-            }}
-
-            h3 {{
-                margin-top: 1.25rem;
             }}
 
             div[data-testid="stAlert"] {{

@@ -105,7 +105,7 @@ def build_forecast_graphs(
 
     history_line = (
         alt.Chart(history)
-        .mark_line(strokeWidth=2, color=PALETTE["observed"])
+        .mark_line(strokeWidth=3.5, color=PALETTE["margin_observed"])   # was strokeWidth=2
         .encode(
             x=_time_x(),
             y=alt.Y("drm_gw:Q", title="DRM (GW)", scale=alt.Scale(zero=False)),
@@ -116,9 +116,15 @@ def build_forecast_graphs(
         )
     )
 
+    area_fill = (                                                        # new
+        alt.Chart(history)
+        .mark_area(opacity=0.15, color=PALETTE["forecast"])
+        .encode(x=_time_x(), y="drm_gw:Q")
+    )
+
     forecast_dot = (
         alt.Chart(point)
-        .mark_point(filled=True, size=200, color=PALETTE["forecast"])
+        .mark_point(filled=True, size=320, color=PALETTE["forecast"], stroke="white", strokeWidth=2)  # was size=200
         .encode(
             x="event_time_utc:T",
             y="drm_gw:Q",
@@ -136,7 +142,7 @@ def build_forecast_graphs(
     )
 
     history_and_forecast = (
-        history_line + target_rule + forecast_dot
+        area_fill + history_line + target_rule + forecast_dot            # area_fill added, drawn first (underneath)
     ).properties(title="Recent DRM + 24h forecast", height=320)
 
     compare = pd.DataFrame(
@@ -147,15 +153,23 @@ def build_forecast_graphs(
     )
 
     comparison_bars = (
-        alt.Chart(compare)
-        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
-        .encode(
-            x=alt.X("state:N", title=None),
-            y=alt.Y("drm_gw:Q", title="DRM (GW)"),
-            tooltip=["state:N", alt.Tooltip("drm_gw:Q", format=".1f")],
-        )
-        .properties(title="Latest vs forecast", height=320)
-    )
+       alt.Chart(compare)
+       .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+       .encode(
+           x=alt.X("state:N", title=None),
+           y=alt.Y("drm_gw:Q", title="DRM (GW)"),
+           color=alt.Color(
+               "state:N",
+               scale=alt.Scale(
+                   domain=["Latest published", "24h forecast"],
+                   range=[PALETTE["margin_observed"], PALETTE["forecast"]],
+               ),
+               legend=None,
+           ),
+           tooltip=["state:N", alt.Tooltip("drm_gw:Q", format=".1f")],
+       )
+       .properties(title="Latest vs forecast", height=320)
+   )
 
     lollipop = (
         alt.Chart(compare)
@@ -196,7 +210,7 @@ def build_forecast_graphs(
 
     history_points = (
         alt.Chart(history)
-        .mark_circle(size=38, opacity=0.6)
+        .mark_circle(size=38, opacity=0.6, color=PALETTE["margin_observed"])
         .encode(
             x=_time_x(),
             y=alt.Y("drm_gw:Q", title="DRM (GW)", scale=alt.Scale(zero=False)),
@@ -226,7 +240,7 @@ def _build_single_series_graphs(
 
     line = (
         alt.Chart(data)
-        .mark_line(strokeWidth=2, color=PALETTE["observed"])
+        .mark_line(strokeWidth=2, color=PALETTE["demand_observed"])
         .encode(
             x=_time_x(),
             y=alt.Y(f"{output_col}:Q", title=f"{label} (GW)", scale=alt.Scale(zero=False)),
@@ -722,7 +736,7 @@ def build_validation_graphs(predictions: pd.DataFrame) -> ChartSet:
 
     residuals = (
         alt.Chart(data)
-        .mark_bar(color=PALETTE["observed"])
+        .mark_bar(color=PALETTE["residual_observed"])
         .encode(
             x=alt.X("target_time_utc:T", title=None),
             y=alt.Y("error_gw:Q", title="Prediction error (GW)"),
@@ -3028,7 +3042,7 @@ def build_demand_settlement_bars(
                 ),
             ),
             color=alt.value(
-                PALETTE["observed"]
+                PALETTE["demand_observed"]
             ),
             opacity=alt.Opacity(
                 "data_type:N",
@@ -4253,7 +4267,7 @@ def build_typical_day_demand_dashboard(
         .mark_point(
             filled=True,
             size=90,
-            color=PALETTE["observed"],
+            color=PALETTE["demand_observed"],
         )
         .encode(
             x="settlement_slot:Q",

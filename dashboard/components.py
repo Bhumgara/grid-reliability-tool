@@ -16,6 +16,8 @@ from dashboard.graphs import (
 
 from html import escape
 
+from dashboard.styles import PALETTE
+
 def _render_data_status_banner(
     title: str,
     message: str,
@@ -296,7 +298,7 @@ def render_forecast_hero(
                 f"{change / 1000:+.1f} GW "
                 "vs latest"
             ),
-            delta_color="off"
+            delta_color = "normal"
         )
 
         local_target = (
