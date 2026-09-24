@@ -2,6 +2,7 @@ import streamlit as st
 
 from dashboard.bootstrap import (
     start_background_worker,
+    ensure_deployment_data,
 )
 from dashboard.components import (
     render_demand_context,
@@ -26,6 +27,7 @@ from dashboard.data import (
 )
 from dashboard.styles import apply_styles
 
+ensure_deployment_data()
 
 st.set_page_config(
     page_title="UK Energy Reliability Tool",
