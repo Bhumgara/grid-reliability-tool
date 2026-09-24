@@ -54,6 +54,33 @@ def normalise_elexon_fuelhh(records):
     ]
 
 
+def normalise_elexon_fuelinst(
+    records,
+):
+    return [
+        {
+            "event_time_utc": parse_utc(
+                row["startTime"]
+            ),
+            "published_at_utc": parse_utc(
+                row["publishTime"]
+            ),
+            "settlement_date": (
+                date.fromisoformat(
+                    row["settlementDate"]
+                )
+            ),
+            "settlement_period": (
+                row["settlementPeriod"]
+            ),
+            "fuel_type": row["fuelType"],
+            "generation_mw": row["generation"],
+            "source": "elexon_fuelinst",
+        }
+        for row in records
+    ]
+
+
 def normalise_neso_generation_mix(records):
     rows = []
 
@@ -88,6 +115,57 @@ def normalise_neso_generation_mix(records):
                 "solar_pct": mix.get("solar"),
                 "wind_pct": mix.get("wind"),
                 "source": "neso_carbon_intensity",
+            }
+        )
+
+    return rows
+
+def normalise_neso_demand_update(
+    records,
+):
+    rows = []
+
+    for row in records:
+        rows.append(
+            {
+                "settlement_date":
+                    row["SETTLEMENT_DATE"],
+
+                "settlement_period":
+                    int(
+                        row[
+                            "SETTLEMENT_PERIOD"
+                        ]
+                    ),
+
+                "forecast_actual_indicator":
+                    row[
+                        "FORECAST_ACTUAL_INDICATOR"
+                    ],
+
+                "embedded_wind_mw":
+                    float(
+                        row[
+                            "EMBEDDED_WIND_GENERATION"
+                        ]
+                    ),
+
+                "embedded_solar_mw":
+                    float(
+                        row[
+                            "EMBEDDED_SOLAR_GENERATION"
+                        ]
+                    ),
+
+                "pump_storage_pumping_mw":
+                    float(
+                        row[
+                            "PUMP_STORAGE_PUMPING"
+                        ]
+                    ),
+
+                "source":
+                    "neso_demand_update",
             }
         )
 

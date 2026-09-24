@@ -5,6 +5,14 @@ import requests
 
 BASE_URL = "https://api.carbonintensity.org.uk"
 
+DATA_PORTAL_BASE_URL = (
+    "https://api.neso.energy/api/3/action"
+)
+
+DEMAND_UPDATE_RESOURCE_ID = (
+    "177f6fa4-ae49-4182-81ea-0c6b35f26ca6"
+)
+
 
 def fetch_generation_mix(from_dt: str, to_dt: str) -> dict:
     url = f"{BASE_URL}/generation/{from_dt}/{to_dt}"
@@ -15,6 +23,30 @@ def fetch_generation_mix(from_dt: str, to_dt: str) -> dict:
     )
 
     response.raise_for_status()
+    return response.json()
+
+def fetch_demand_update(
+    limit: int = 5000,
+) -> dict:
+    url = (
+        f"{DATA_PORTAL_BASE_URL}/"
+        "datastore_search"
+    )
+
+    params = {
+        "resource_id":
+            DEMAND_UPDATE_RESOURCE_ID,
+        "limit": limit,
+    }
+
+    response = requests.get(
+        url,
+        params=params,
+        timeout=(5, 30),
+    )
+
+    response.raise_for_status()
+
     return response.json()
 
 def save_raw_neso(data: dict, filename: str) -> None:

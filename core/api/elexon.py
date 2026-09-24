@@ -101,6 +101,42 @@ def fetch_fuelhh(from_dt: str, to_dt: str) -> dict:
     return response.json()
 
 
+def fetch_fuelinst(
+    from_dt: str,
+    to_dt: str,
+) -> dict:
+    url = f"{BASE_URL}/datasets/FUELINST"
+
+    params = {
+        "publishDateTimeFrom": from_dt,
+        "publishDateTimeTo": to_dt,
+        "format": "json",
+    }
+
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=(5, 30),
+        )
+
+        response.raise_for_status()
+
+    except requests.HTTPError as exc:
+        raise RuntimeError(
+            "Elexon FUELINST request failed "
+            f"({response.status_code}): "
+            f"{response.text}"
+        ) from exc
+
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"Could not reach Elexon API: {exc}"
+        ) from exc
+
+    return response.json()
+
+
 def save_raw(data: dict, filename: str) -> None:
     path = Path("data/raw/elexon")
     path.mkdir(parents=True, exist_ok=True)
