@@ -14,6 +14,39 @@ from dashboard.graphs import (
     build_validation_graphs,
 )
 
+from html import escape
+
+def _render_data_status_banner(
+    title: str,
+    message: str,
+) -> None:
+    st.markdown(
+        f"""
+        <div
+            class="data-status-banner"
+            role="status"
+        >
+            <span
+                class="data-status-dot"
+                aria-hidden="true"
+            >
+                ●
+            </span>
+
+            <div class="data-status-content">
+                <span class="data-status-title">
+                    {escape(title)}
+                </span>
+
+                <span class="data-status-message">
+                    {escape(message)}
+                </span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def render_refresh_status(
     status: dict,
 ) -> None:
@@ -68,11 +101,14 @@ def render_refresh_status(
             completed = None
 
     if state == "refreshing":
-        st.info(
-            "Refreshing live grid data in the "
-            "background. The dashboard is "
-            "temporarily showing the latest "
-            "cached values."
+        _render_data_status_banner(
+            title="Refreshing data",
+            message=(
+                "Refreshing live grid data in the "
+                "background. The dashboard is "
+                "temporarily showing the latest "
+                "cached values."
+            ),
         )
         return
 
@@ -80,12 +116,15 @@ def render_refresh_status(
         "degraded",
         "failed",
     }:
-        st.warning(
-            message
-            or (
-                "Live refresh is unavailable; "
-                "serving cached values."
-            )
+        _render_data_status_banner(
+            title="Data delayed",
+            message=(
+                message
+                or (
+                    "Live refresh is unavailable; "
+                    "serving cached values."
+                )
+            ),
         )
 
         source_refresh = status.get(
@@ -257,6 +296,7 @@ def render_forecast_hero(
                 f"{change / 1000:+.1f} GW "
                 "vs latest"
             ),
+            delta_color="off"
         )
 
         local_target = (
@@ -443,7 +483,7 @@ def render_recent_grid_history(
         )
 
         st.caption(
-            "Amber bars are display-only linear estimates "
+            "Faded bars are display-only linear estimates "
             "for internal missing settlement periods. "
             "They are never written back into the model data."
         )

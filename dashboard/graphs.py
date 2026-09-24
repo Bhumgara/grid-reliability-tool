@@ -15,6 +15,13 @@ import streamlit as st
 
 ChartSet = dict[str, Any]
 
+from dashboard.styles import (
+    DEMAND_PROFILE_COLOURS, 
+    FUEL_COLOURS, 
+    MODEL_COLOURS, 
+    PALETTE
+    )
+
 FUEL_LABELS = {
     "CCGT": "Gas",
     "COAL": "Coal",
@@ -98,7 +105,7 @@ def build_forecast_graphs(
 
     history_line = (
         alt.Chart(history)
-        .mark_line(strokeWidth=2)
+        .mark_line(strokeWidth=2, color=PALETTE["observed"])
         .encode(
             x=_time_x(),
             y=alt.Y("drm_gw:Q", title="DRM (GW)", scale=alt.Scale(zero=False)),
@@ -111,7 +118,7 @@ def build_forecast_graphs(
 
     forecast_dot = (
         alt.Chart(point)
-        .mark_point(filled=True, size=200)
+        .mark_point(filled=True, size=200, color=PALETTE["forecast"])
         .encode(
             x="event_time_utc:T",
             y="drm_gw:Q",
@@ -124,7 +131,7 @@ def build_forecast_graphs(
 
     target_rule = (
         alt.Chart(pd.DataFrame({"event_time_utc": [target]}))
-        .mark_rule(strokeDash=[5, 5])
+        .mark_rule(strokeDash=[5, 5], color=PALETTE["forecast"])
         .encode(x="event_time_utc:T")
     )
 
@@ -219,7 +226,7 @@ def _build_single_series_graphs(
 
     line = (
         alt.Chart(data)
-        .mark_line(strokeWidth=2)
+        .mark_line(strokeWidth=2, color=PALETTE["observed"])
         .encode(
             x=_time_x(),
             y=alt.Y(f"{output_col}:Q", title=f"{label} (GW)", scale=alt.Scale(zero=False)),
@@ -715,7 +722,7 @@ def build_validation_graphs(predictions: pd.DataFrame) -> ChartSet:
 
     residuals = (
         alt.Chart(data)
-        .mark_bar()
+        .mark_bar(color=PALETTE["observed"])
         .encode(
             x=alt.X("target_time_utc:T", title=None),
             y=alt.Y("error_gw:Q", title="Prediction error (GW)"),
@@ -1300,7 +1307,7 @@ def build_drm_change_bridge(
             filled=True,
             size=220,
             shape=arrow_shape,
-            color="black",
+            color=PALETTE["direction"],
             fillOpacity=1
         )
         .encode(
@@ -2867,30 +2874,6 @@ def build_concept_graphs(
 # Dashboard-selected chart implementations
 # ============================================================
 
-FUEL_COLOURS = {
-    "WIND": "#4E79A7",
-    "SOLAR": "#F2C94C",
-    "CCGT": "#E15759",
-    "NUCLEAR": "#F1CE63",
-    "BIOMASS": "#59A14F",
-    "NPSHYD": "#76B7B2",
-    "PS": "#B07AA1",
-    "OCGT": "#FF9DA7",
-    "OIL": "#9C755F",
-    "COAL": "#79706E",
-    "OTHER": "#BAB0AC",
-    "INTELEC": "#86BCB6",
-    "INTEW": "#8CD17D",
-    "INTFR": "#499894",
-    "INTGRNL": "#D4A6C8",
-    "INTIFA2": "#FABFD2",
-    "INTIRL": "#B6992D",
-    "INTNED": "#D37295",
-    "INTNEM": "#A0CBE8",
-    "INTNSL": "#FFBE7D",
-    "INTVKL": "#8F7C6E",
-}
-
 
 def _fuel_scale(values: pd.Series) -> alt.Scale:
     domain = [
@@ -2901,7 +2884,7 @@ def _fuel_scale(values: pd.Series) -> alt.Scale:
     colours = [
         FUEL_COLOURS.get(
             value,
-            "#A7A7A7",
+            PALETTE["other"],
         )
         for value in domain
     ]
@@ -3044,7 +3027,10 @@ def build_demand_settlement_bars(
                     zero=False,
                 ),
             ),
-            color=alt.Color(
+            color=alt.value(
+                PALETTE["observed"]
+            ),
+            opacity=alt.Opacity(
                 "data_type:N",
                 title="Data",
                 scale=alt.Scale(
@@ -3053,8 +3039,8 @@ def build_demand_settlement_bars(
                         "Estimated",
                     ],
                     range=[
-                        "#4E79A7",
-                        "#F2A541",
+                        1.0,
+                        0.35,
                     ],
                 ),
             ),
@@ -3080,6 +3066,7 @@ def build_demand_settlement_bars(
                 "settlement period"
             ),
             height=300,
+
         )
     )
 
@@ -3199,7 +3186,7 @@ def build_generation_doughnut_dashboard(
     label_range = [
         FUEL_COLOURS.get(
             fuel,
-            "#A7A7A7",
+            PALETTE["other"],
         )
         for fuel in mix[
             "fuel_type"
@@ -3217,7 +3204,7 @@ def build_generation_doughnut_dashboard(
         .mark_arc(
             innerRadius=62,
             outerRadius=104,
-            stroke="white",
+            stroke=PALETTE["background"],
             strokeWidth=1,
         )
         .encode(
@@ -3599,7 +3586,8 @@ def build_generation_change_dashboard(
                 "movement_strength:Q",
                 title="Movement strength",
                 scale=alt.Scale(
-                    scheme="oranges",
+                    range=[PALETTE["movement_light"], PALETTE["movement_dark"]],
+                    domain=[0, 1]
                 ),
             ),
             tooltip=[
@@ -3761,6 +3749,17 @@ def build_model_vs_persistence_vertical(
         + padding
     )
 
+    method_colour_scale = alt.Scale(
+        domain=[
+            "Ridge",
+            "Persistence",
+        ],
+        range=[
+            MODEL_COLOURS["Ridge"],
+            MODEL_COLOURS["Persistence"],
+        ],
+    )
+
     lines = (
         alt.Chart(compare)
         .mark_line(
@@ -3790,8 +3789,103 @@ def build_model_vs_persistence_vertical(
             color=alt.Color(
                 "method:N",
                 title=None,
+                scale=method_colour_scale,
             ),
         )
+    )
+
+    points = (
+        alt.Chart(compare)
+        .mark_point(
+            filled=True,
+            size=180,
+        )
+        .encode(
+            x=alt.X(
+                "segment:N",
+                sort=[
+                    "Overall",
+                    "Lowest 10% DRM",
+                ],
+            ),
+            y=alt.Y(
+                "mae_gw:Q",
+                scale=alt.Scale(
+                    domain=[
+                        lower_bound,
+                        upper_bound,
+                    ],
+                    zero=False,
+                ),
+            ),
+            color=alt.Color(
+                "method:N",
+                title=None,
+                scale=method_colour_scale,
+            ),
+            tooltip=[
+                alt.Tooltip(
+                    "segment:N",
+                    title="Segment",
+                ),
+                alt.Tooltip(
+                    "method:N",
+                    title="Method",
+                ),
+                alt.Tooltip(
+                    "mae_gw:Q",
+                    title="MAE (GW)",
+                    format=".2f",
+                ),
+            ],
+        )
+    )
+
+    labels = (
+        alt.Chart(compare)
+        .mark_text(
+            dy=-14,
+            fontSize=12,
+        )
+        .encode(
+            x=alt.X(
+                "segment:N",
+                sort=[
+                    "Overall",
+                    "Lowest 10% DRM",
+                ],
+            ),
+            y=alt.Y(
+                "mae_gw:Q",
+                scale=alt.Scale(
+                    domain=[
+                        lower_bound,
+                        upper_bound,
+                    ],
+                    zero=False,
+                ),
+            ),
+            text=alt.Text(
+                "mae_gw:Q",
+                format=".2f",
+            ),
+            color=alt.Color(
+                "method:N",
+                legend=None,
+                scale=method_colour_scale,
+            ),
+        )
+    )
+
+    return (
+        lines
+        + points
+        + labels
+    ).properties(
+        title=(
+            "Ridge vs persistence · lower is better"
+        ),
+        height=300,
     )
 
     points = (
@@ -4035,7 +4129,7 @@ def build_typical_day_demand_dashboard(
         alt.Chart(typical)
         .mark_area(
             opacity=0.16,
-            color="#9E9E9E",
+            color=PALETTE["historical_iqr"],
         )
         .encode(
             x=alt.X(
@@ -4108,9 +4202,9 @@ def build_typical_day_demand_dashboard(
                         "Historical median",
                     ],
                     range=[
-                        "#4E79A7",
-                        "#59A14F",
-                        "#666666",
+                        DEMAND_PROFILE_COLOURS["Current profile"],
+                        DEMAND_PROFILE_COLOURS["Latest full profile"],
+                        DEMAND_PROFILE_COLOURS["Historical median"],
                     ],
                 ),
             ),
@@ -4159,7 +4253,7 @@ def build_typical_day_demand_dashboard(
         .mark_point(
             filled=True,
             size=90,
-            color="#4E79A7",
+            color=PALETTE["observed"],
         )
         .encode(
             x="settlement_slot:Q",
