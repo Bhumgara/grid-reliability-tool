@@ -14,6 +14,22 @@ import pandas as pd
 
 ChartSet = dict[str, Any]
 
+FUEL_LABELS = {
+    "CCGT": "Gas",
+    "WIND": "Wind",
+    "NUCLEAR": "Nuclear",
+    "BIOMASS": "Biomass",
+    "NPSHYD": "Hydro",
+
+    "INTVKL": "Denmark Link",
+    "INTNED": "Netherlands Link",
+    "INTNSL": "Norway Link",
+    "INTIFA2": "France Link 1",
+    "INTELEC": "France Link 2",
+
+    "OTHER": "Other",
+}
+
 
 def _datetime(df: pd.DataFrame, column: str) -> pd.DataFrame:
     out = df.copy()
@@ -1038,6 +1054,10 @@ def build_drm_change_bridge(
 ) -> alt.TopLevelMixin:
     """
     Compare the latest known DRM with the 24-hour-ahead prediction.
+
+    Uses data-space y positions and a padded x-domain rather than fixed
+    pixel offsets, so the points and labels remain inside the plot when
+    the Streamlit column changes width.
     """
     latest = (
         float(
@@ -1055,6 +1075,41 @@ def build_drm_change_bridge(
 
     delta = predicted - latest
 
+    lower = min(
+        latest,
+        predicted,
+    )
+
+    upper = max(
+        latest,
+        predicted,
+    )
+
+    span = max(
+        upper - lower,
+        0.5,
+    )
+
+    padding = max(
+        span * 0.30,
+        0.65,
+    )
+
+    x_domain = [
+        lower - padding,
+        upper + padding,
+    ]
+
+    direction = (
+        "↑"
+        if delta > 0
+        else (
+            "↓"
+            if delta < 0
+            else "→"
+        )
+    )
+
     points = pd.DataFrame(
         {
             "state": [
@@ -1065,54 +1120,97 @@ def build_drm_change_bridge(
                 latest,
                 predicted,
             ],
+            "position": [
+                0.48,
+                0.48,
+            ],
+            "label_y": [
+                0.77,
+                0.77,
+            ],
             "label": [
-                f"{latest:.1f} GW",
-                f"{predicted:.1f} GW",
+                (
+                    "Current · "
+                    f"{latest:.1f} GW"
+                ),
+                (
+                    "24h forecast · "
+                    f"{predicted:.1f} GW"
+                ),
             ],
         }
     )
 
     bridge = pd.DataFrame(
         {
-            "row": [
-                "DRM"
-            ],
             "start": [
                 latest
             ],
             "end": [
                 predicted
             ],
-            "delta": [
-                delta
+            "position": [
+                0.48
+            ],
+            "midpoint": [
+                (
+                    latest
+                    + predicted
+                )
+                / 2
+            ],
+            "annotation_y": [
+                0.23
+            ],
+            "delta_label": [
+                (
+                    f"{direction} "
+                    f"{delta:+.1f} GW"
+                )
             ],
         }
+    )
+
+    x_encoding = alt.X(
+        "drm_gw:Q",
+        title="De-rated margin (GW)",
+        scale=alt.Scale(
+            domain=x_domain,
+            zero=False,
+            nice=False,
+        ),
+        axis=alt.Axis(
+            tickCount=5,
+            grid=False,
+        ),
     )
 
     connector = (
         alt.Chart(bridge)
         .mark_rule(
-            strokeWidth=5,
+            strokeWidth=4,
         )
         .encode(
             x=alt.X(
                 "start:Q",
-                title="De-rated margin (GW)",
                 scale=alt.Scale(
-                    zero=False
+                    domain=x_domain,
+                    zero=False,
+                    nice=False,
                 ),
             ),
             x2="end:Q",
             y=alt.Y(
-                "row:N",
-                title=None,
+                "position:Q",
                 axis=None,
+                scale=alt.Scale(
+                    domain=[0, 1]
+                ),
             ),
             tooltip=[
                 alt.Tooltip(
-                    "delta:Q",
-                    title="Change (GW)",
-                    format="+.1f",
+                    "delta_label:N",
+                    title="Change",
                 )
             ],
         )
@@ -1122,20 +1220,37 @@ def build_drm_change_bridge(
         alt.Chart(points)
         .mark_point(
             filled=True,
-            size=230,
+            size=220,
         )
         .encode(
-            x="drm_gw:Q",
-            y=alt.value(30),
+            x=x_encoding,
+            y=alt.Y(
+                "position:Q",
+                axis=None,
+                scale=alt.Scale(
+                    domain=[0, 1]
+                ),
+            ),
             shape=alt.Shape(
                 "state:N",
                 title=None,
+                legend=None,
+                scale=alt.Scale(
+                    domain=[
+                        "Current",
+                        "24h forecast",
+                    ],
+                    range=[
+                        "square",
+                        "circle",
+                    ],
+                ),
             ),
             tooltip=[
                 "state:N",
                 alt.Tooltip(
                     "drm_gw:Q",
-                    title="DRM (GW)",
+                    title="DRM",
                     format=".1f",
                 ),
             ],
@@ -1145,13 +1260,51 @@ def build_drm_change_bridge(
     labels = (
         alt.Chart(points)
         .mark_text(
-            dy=-24,
             fontWeight="bold",
+            fontSize=12,
         )
         .encode(
-            x="drm_gw:Q",
-            y=alt.value(30),
+            x=alt.X(
+                "drm_gw:Q",
+                scale=alt.Scale(
+                    domain=x_domain,
+                    zero=False,
+                    nice=False,
+                ),
+            ),
+            y=alt.Y(
+                "label_y:Q",
+                axis=None,
+                scale=alt.Scale(
+                    domain=[0, 1]
+                ),
+            ),
             text="label:N",
+        )
+    )
+
+    delta_label = (
+        alt.Chart(bridge)
+        .mark_text(
+            fontSize=12,
+        )
+        .encode(
+            x=alt.X(
+                "midpoint:Q",
+                scale=alt.Scale(
+                    domain=x_domain,
+                    zero=False,
+                    nice=False,
+                ),
+            ),
+            y=alt.Y(
+                "annotation_y:Q",
+                axis=None,
+                scale=alt.Scale(
+                    domain=[0, 1]
+                ),
+            ),
+            text="delta_label:N",
         )
     )
 
@@ -1159,18 +1312,14 @@ def build_drm_change_bridge(
         connector
         + point_chart
         + labels
+        + delta_label
     ).properties(
         title=(
             "Current DRM to "
             "24-hour forecast"
         ),
-        height=120,
+        height=175,
     )
-
-
-# ------------------------------------------------------------
-# 3. Typical-day demand profile
-# ------------------------------------------------------------
 
 def build_typical_day_demand_graph(
     demand_history: pd.DataFrame,
@@ -2835,10 +2984,13 @@ def build_generation_doughnut_dashboard(
 ) -> alt.TopLevelMixin:
     """
     Current generation mix with:
-      - small categories grouped into Other,
-      - semantic fuel colours,
-      - total positive tracked generation in the centre,
-      - outside text labels for readable major contributors.
+      - small categories grouped into Other;
+      - semantic fuel colours;
+      - total positive tracked generation in the centre;
+      - a compact legend instead of floating labels.
+
+    Keeping labels out of the arc itself makes the chart much more robust
+    when Streamlit renders it in a narrow column or on a different screen.
     """
     mix, latest_time = (
         _latest_generation_snapshot(
@@ -2896,6 +3048,11 @@ def build_generation_doughnut_dashboard(
         "generation_gw"
     ].sum()
 
+    if total_gw <= 0:
+        raise ValueError(
+            "Generation mix total must be positive."
+        )
+
     mix["share"] = (
         mix["generation_gw"]
         / total_gw
@@ -2908,25 +3065,52 @@ def build_generation_doughnut_dashboard(
         drop=True
     )
 
-    mix["label"] = (
+    mix["display_name"] = (
         mix["fuel_type"]
+        .map(FUEL_LABELS)
+        .fillna(
+            mix["fuel_type"]
+        )
+    )
+
+    mix["legend_label"] = (
+        mix["display_name"]
         + " · "
         + (
             mix["share"]
             * 100
-        ).round(0).astype(int).astype(str)
+        )
+        .round(0)
+        .astype(int)
+        .astype(str)
         + "%"
     )
 
-    scale = _fuel_scale(
-        mix["fuel_type"]
+    label_domain = mix[
+        "legend_label"
+    ].tolist()
+
+    label_range = [
+        FUEL_COLOURS.get(
+            fuel,
+            "#A7A7A7",
+        )
+        for fuel in mix[
+            "fuel_type"
+        ]
+    ]
+
+    local_time = (
+        latest_time.tz_convert(
+            "Europe/London"
+        )
     )
 
     doughnut = (
         alt.Chart(mix)
         .mark_arc(
-            innerRadius=78,
-            outerRadius=130,
+            innerRadius=62,
+            outerRadius=104,
             stroke="white",
             strokeWidth=1,
         )
@@ -2935,13 +3119,21 @@ def build_generation_doughnut_dashboard(
                 "generation_gw:Q",
             ),
             color=alt.Color(
-                "fuel_type:N",
-                title="Fuel",
-                scale=scale,
-                sort=(
-                    mix[
-                        "fuel_type"
-                    ].tolist()
+                "legend_label:N",
+                title="Generation source",
+                scale=alt.Scale(
+                    domain=label_domain,
+                    range=label_range,
+                ),
+                sort=label_domain,
+                legend=alt.Legend(
+                    orient="bottom",
+                    columns=2,
+                    direction="horizontal",
+                    labelLimit=150,
+                    symbolType="square",
+                    titlePadding=8,
+                    offset=12,
                 ),
             ),
             order=alt.Order(
@@ -2955,7 +3147,7 @@ def build_generation_doughnut_dashboard(
                 ),
                 alt.Tooltip(
                     "generation_gw:Q",
-                    title="Generation",
+                    title="Generation (GW)",
                     format=".2f",
                 ),
                 alt.Tooltip(
@@ -2967,43 +3159,20 @@ def build_generation_doughnut_dashboard(
         )
     )
 
-    outside_labels = (
-        alt.Chart(mix)
-        .mark_text(
-            radius=158,
-            fontSize=11,
-        )
-        .encode(
-            theta=alt.Theta(
-                "generation_gw:Q",
-                stack=True,
-            ),
-            text="label:N",
-            color=alt.Color(
-                "fuel_type:N",
-                scale=scale,
-                legend=None,
-            ),
-        )
-    )
-
     centre = (
         alt.Chart(
             pd.DataFrame(
                 {
                     "value": [
                         f"{total_gw:.1f} GW"
-                    ],
-                    "caption": [
-                        "tracked output"
-                    ],
+                    ]
                 }
             )
         )
         .mark_text(
-            fontSize=24,
+            fontSize=22,
             fontWeight="bold",
-            dy=-8,
+            dy=-7,
         )
         .encode(
             text="value:N"
@@ -3022,32 +3191,31 @@ def build_generation_doughnut_dashboard(
         )
         .mark_text(
             fontSize=11,
-            dy=18,
+            dy=17,
         )
         .encode(
             text="caption:N"
         )
     )
 
-    local_time = (
-        latest_time.tz_convert(
-            "Europe/London"
-        )
-    )
-
     return (
         doughnut
-        + outside_labels
         + centre
         + centre_caption
     ).properties(
-        title=(
-            "Current generation mix · "
-            f"{local_time.strftime('%d %b · %H:%M %Z')}"
-        ),
-        height=360,
+        height=600,
+        title=alt.TitleParams(
+                    text=(
+                        "Current generation mix"
+                    ),
+                    subtitle=(
+                        local_time.strftime(
+                            "%d %b · %H:%M %Z"
+                        )
+                    ),
+                    anchor="start",
+                ),
     )
-
 
 def build_generation_change_dashboard(
     generation: pd.DataFrame,
@@ -3475,10 +3643,13 @@ def build_typical_day_demand_dashboard(
     demand_history: pd.DataFrame,
 ) -> alt.TopLevelMixin:
     """
-    Dashboard version of the typical-day concept.
+    Compare:
+      - today's in-progress demand profile;
+      - the latest prior full-day profile;
+      - the historical median and interquartile range.
 
-    The legend explicitly distinguishes the latest profile from the
-    historical median, while a light IQR band shows the typical range.
+    Showing the prior complete profile keeps the chart useful early in the
+    day, when the current profile may contain only a few settlement periods.
     """
     _require_columns(
         demand_history,
@@ -3496,7 +3667,9 @@ def build_typical_day_demand_dashboard(
         ]
     ].dropna().copy()
 
-    data["event_time_utc"] = pd.to_datetime(
+    data[
+        "event_time_utc"
+    ] = pd.to_datetime(
         data["event_time_utc"],
         utc=True,
     )
@@ -3529,13 +3702,37 @@ def build_typical_day_demand_dashboard(
     reference = data[
         data["local_date"]
         < latest_date
-    ]
+    ].copy()
 
     if reference.empty:
         raise ValueError(
             "Typical-day demand needs at least "
             "one earlier local day for comparison."
         )
+
+    profile_counts = (
+        reference.groupby(
+            "local_date"
+        )["settlement_slot"]
+        .nunique()
+    )
+
+    complete_dates = (
+        profile_counts[
+            profile_counts >= 46
+        ].index
+    )
+
+    if len(
+        complete_dates
+    ):
+        latest_full_date = max(
+            complete_dates
+        )
+    else:
+        latest_full_date = reference[
+            "local_date"
+        ].max()
 
     typical = (
         reference.groupby(
@@ -3557,9 +3754,19 @@ def build_typical_day_demand_dashboard(
         .reset_index()
     )
 
-    latest = data[
+    current = data[
         data["local_date"]
         == latest_date
+    ][
+        [
+            "settlement_slot",
+            "demand_gw",
+        ]
+    ].copy()
+
+    latest_full = data[
+        data["local_date"]
+        == latest_full_date
     ][
         [
             "settlement_slot",
@@ -3585,9 +3792,15 @@ def build_typical_day_demand_dashboard(
                 )
             ),
 
-            latest.assign(
+            latest_full.assign(
                 series=(
-                    "Latest profile"
+                    "Latest full profile"
+                )
+            ),
+
+            current.assign(
+                series=(
+                    "Current profile"
                 )
             ),
         ],
@@ -3597,7 +3810,7 @@ def build_typical_day_demand_dashboard(
     band = (
         alt.Chart(typical)
         .mark_area(
-            opacity=0.18,
+            opacity=0.16,
             color="#9E9E9E",
         )
         .encode(
@@ -3609,6 +3822,9 @@ def build_typical_day_demand_dashboard(
                         1,
                         48,
                     ]
+                ),
+                axis=alt.Axis(
+                    tickCount=12,
                 ),
             ),
             y=alt.Y(
@@ -3641,12 +3857,18 @@ def build_typical_day_demand_dashboard(
     lines = (
         alt.Chart(line_data)
         .mark_line(
-            strokeWidth=3,
+            strokeWidth=2.6,
         )
         .encode(
             x=alt.X(
                 "settlement_slot:Q",
                 title="Settlement period",
+                scale=alt.Scale(
+                    domain=[
+                        1,
+                        48,
+                    ]
+                ),
             ),
             y=alt.Y(
                 "demand_gw:Q",
@@ -3657,11 +3879,13 @@ def build_typical_day_demand_dashboard(
                 title=None,
                 scale=alt.Scale(
                     domain=[
-                        "Latest profile",
+                        "Current profile",
+                        "Latest full profile",
                         "Historical median",
                     ],
                     range=[
                         "#4E79A7",
+                        "#59A14F",
                         "#666666",
                     ],
                 ),
@@ -3671,10 +3895,12 @@ def build_typical_day_demand_dashboard(
                 title=None,
                 scale=alt.Scale(
                     domain=[
-                        "Latest profile",
+                        "Current profile",
+                        "Latest full profile",
                         "Historical median",
                     ],
                     range=[
+                        [1, 0],
                         [1, 0],
                         [6, 4],
                     ],
@@ -3695,13 +3921,53 @@ def build_typical_day_demand_dashboard(
         )
     )
 
+    current_latest = (
+        current.sort_values(
+            "settlement_slot"
+        )
+        .tail(1)
+    )
+
+    current_marker = (
+        alt.Chart(
+            current_latest
+        )
+        .mark_point(
+            filled=True,
+            size=90,
+            color="#4E79A7",
+        )
+        .encode(
+            x="settlement_slot:Q",
+            y="demand_gw:Q",
+            tooltip=[
+                alt.Tooltip(
+                    "settlement_slot:Q",
+                    title="Latest current period",
+                ),
+                alt.Tooltip(
+                    "demand_gw:Q",
+                    title="Demand",
+                    format=".1f",
+                ),
+            ],
+        )
+    )
+
     return (
         band
         + lines
+        + current_marker
     ).properties(
-        title=(
-            "Latest demand profile "
-            "vs historical typical range"
+        title=alt.TitleParams(
+            text=(
+                "Demand vs a typical day"
+            ),
+            subtitle=(
+                "Current partial profile + latest full profile "
+                "+ historical interquartile range"
+            ),
+            anchor="start",
         ),
         height=320,
     )

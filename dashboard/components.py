@@ -13,76 +13,137 @@ from dashboard.graphs import (
     build_validation_graphs,
 )
 
-
-def render_refresh_status(status: dict) -> None:
+def render_refresh_status(
+    status: dict,
+) -> None:
     """Render a compact live/cached-data status message."""
     if not status:
         st.caption(
-            "Live refresh worker is starting · showing cached data until the first check completes."
+            "Live refresh worker is starting · "
+            "showing cached data until the first "
+            "check completes."
         )
         return
 
-    state = status.get("state", "unknown")
-    message = status.get("message", "")
+    state = status.get(
+        "state",
+        "unknown",
+    )
 
-    completed_raw = status.get("completed_at_utc")
+    message = status.get(
+        "message",
+        "",
+    )
+
+    completed_raw = status.get(
+        "completed_at_utc"
+    )
+
     completed = None
 
     if completed_raw:
         try:
-            completed = pd.Timestamp(completed_raw)
+            completed = pd.Timestamp(
+                completed_raw
+            )
+
             if completed.tzinfo is None:
-                completed = completed.tz_localize("UTC")
+                completed = (
+                    completed.tz_localize(
+                        "UTC"
+                    )
+                )
             else:
-                completed = completed.tz_convert("UTC")
-        except (ValueError, TypeError):
+                completed = (
+                    completed.tz_convert(
+                        "UTC"
+                    )
+                )
+
+        except (
+            ValueError,
+            TypeError,
+        ):
             completed = None
 
     if state == "refreshing":
         st.info(
-            "Refreshing live grid data in the background. "
-            "The dashboard is temporarily showing the latest cached values."
+            "Refreshing live grid data in the "
+            "background. The dashboard is "
+            "temporarily showing the latest "
+            "cached values."
         )
         return
 
-    if state in {"degraded", "failed"}:
+    if state in {
+        "degraded",
+        "failed",
+    }:
         st.warning(
             message
-            or "Live refresh is unavailable; serving cached values."
+            or (
+                "Live refresh is unavailable; "
+                "serving cached values."
+            )
         )
 
-        source_refresh = status.get("source_refresh", {})
-        prediction = status.get("prediction", {})
+        source_refresh = status.get(
+            "source_refresh",
+            {},
+        )
+
+        prediction = status.get(
+            "prediction",
+            {},
+        )
 
         errors = []
 
-        for source_name, result in source_refresh.items():
-            if result.get("error"):
+        for (
+            source_name,
+            result,
+        ) in source_refresh.items():
+            if result.get(
+                "error"
+            ):
                 errors.append(
-                    f"{source_name}: {result['error']}"
+                    f"{source_name}: "
+                    f"{result['error']}"
                 )
 
-        if prediction.get("error"):
+        if prediction.get(
+            "error"
+        ):
             errors.append(
-                f"Prediction: {prediction['error']}"
+                "Prediction: "
+                f"{prediction['error']}"
             )
 
         if errors:
-            with st.expander("Refresh details"):
+            with st.expander(
+                "Refresh details"
+            ):
                 for error in errors:
-                    st.caption(error)
+                    st.caption(
+                        error
+                    )
 
         return
 
     if completed is not None:
-        local = completed.tz_convert("Europe/London")
+        local = completed.tz_convert(
+            "Europe/London"
+        )
+
         st.caption(
             "● Live data checked "
             f"{local.strftime('%d %b · %H:%M %Z')}"
         )
-    else:
-        st.caption("● Live data refresh active")
 
+    else:
+        st.caption(
+            "● Live data refresh active"
+        )
 
 def calculate_margin_percentile(
     predicted_drm_mw: float,
@@ -291,9 +352,9 @@ def render_grid_context(
             / 1000
         )
 
-    columns = st.columns(4)
+    curr_drm, curr_demand, track_gen, upload_date = st.columns([1, 1, 1, 1.5])
 
-    columns[0].metric(
+    curr_drm.metric(
         "Current DRM",
         (
             f"{latest_margin['derated_margin_mw'] / 1000:.1f} "
@@ -301,7 +362,7 @@ def render_grid_context(
         ),
     )
 
-    columns[1].metric(
+    curr_demand.metric(
         "Current demand",
         (
             f"{latest_demand['demand_mw'] / 1000:.1f} "
@@ -309,7 +370,7 @@ def render_grid_context(
         ),
     )
 
-    columns[2].metric(
+    track_gen.metric(
         "Tracked generation",
         (
             f"{total_generation:.1f} GW"
@@ -324,7 +385,7 @@ def render_grid_context(
         ]
     )
 
-    columns[3].metric(
+    upload_date.metric(
         "Data updated",
         latest_time.strftime(
             "%d %b · %H:%M UTC"
@@ -411,9 +472,9 @@ def render_demand_context(
     )
 
     st.caption(
-        "The latest local-day profile is compared with "
-        "the historical median and interquartile range "
-        "for each half-hour settlement period."
+        "The current in-progress profile is shown alongside the "
+        "latest full-day profile, historical median, and interquartile "
+        "range for each half-hour settlement period."
     )
 
 
@@ -430,39 +491,39 @@ def render_generation_section(
         )
         return
 
-    mix, movement = (
-        st.columns(
-            [1, 1.15]
-        )
+    # mix, movement = (
+    #     st.columns(
+    #         [2, 1]
+    #     )
+    # )
+
+# with mix:
+    st.altair_chart(
+        build_generation_doughnut_dashboard(
+            generation
+        ),
+        width="stretch",
     )
 
-    with mix:
-        st.altair_chart(
-            build_generation_doughnut_dashboard(
-                generation
-            ),
-            width="stretch",
-        )
+    st.caption(
+        "Small positive contributors are grouped into Other. "
+        "Negative interconnector / storage flows are not represented "
+        "as doughnut slices."
+    )
 
-        st.caption(
-            "Small positive contributors are grouped into Other. "
-            "Negative interconnector / storage flows are not represented "
-            "as doughnut slices."
-        )
+# with movement:
+    st.altair_chart(
+        build_generation_change_dashboard(
+            generation,
+            lookback_hours=4,
+        ),
+        width="stretch",
+    )
 
-    with movement:
-        st.altair_chart(
-            build_generation_change_dashboard(
-                generation,
-                lookback_hours=4,
-            ),
-            width="stretch",
-        )
-
-        st.caption(
-            "Direction is shown by which side of zero the bar reaches; "
-            "colour intensity represents movement strength."
-        )
+    st.caption(
+        "Direction is shown by which side of zero the bar reaches; "
+        "colour intensity represents movement strength."
+    )
 
 
 def render_model_performance(
