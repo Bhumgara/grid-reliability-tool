@@ -45,6 +45,9 @@ st.caption(
     "Forecasting the UK's electricity "
     "supply-demand margin 24 hours ahead"
 )
+st.caption(
+    "By Watt Next"
+)
 
 
 @st.fragment(run_every="60s")

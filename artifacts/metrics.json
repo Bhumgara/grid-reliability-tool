@@ -1,0 +1,16 @@
+{
+  "model": "Ridge Regression",
+  "alpha": 350.0,
+  "forecast_horizon_hours": 24,
+  "development_start": "2024-09-28T00:00:00+00:00",
+  "development_end": "2025-12-31T23:30:00+00:00",
+  "test_start": "2026-01-01T00:00:00+00:00",
+  "test_end": "2026-09-21T00:00:00+00:00",
+  "development_rows": 21773,
+  "test_rows": 12356,
+  "model_mae_mw": 3401.0720158511,
+  "model_rmse_mw": 4284.706850334732,
+  "baseline_mae_mw": 4120.391309177728,
+  "baseline_rmse_mw": 5332.554269607374,
+  "mae_improvement_pct": 17.457548066476637
+}
