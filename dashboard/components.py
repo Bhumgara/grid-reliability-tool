@@ -14,6 +14,76 @@ from dashboard.graphs import (
 )
 
 
+def render_refresh_status(status: dict) -> None:
+    """Render a compact live/cached-data status message."""
+    if not status:
+        st.caption(
+            "Live refresh worker is starting · showing cached data until the first check completes."
+        )
+        return
+
+    state = status.get("state", "unknown")
+    message = status.get("message", "")
+
+    completed_raw = status.get("completed_at_utc")
+    completed = None
+
+    if completed_raw:
+        try:
+            completed = pd.Timestamp(completed_raw)
+            if completed.tzinfo is None:
+                completed = completed.tz_localize("UTC")
+            else:
+                completed = completed.tz_convert("UTC")
+        except (ValueError, TypeError):
+            completed = None
+
+    if state == "refreshing":
+        st.info(
+            "Refreshing live grid data in the background. "
+            "The dashboard is temporarily showing the latest cached values."
+        )
+        return
+
+    if state in {"degraded", "failed"}:
+        st.warning(
+            message
+            or "Live refresh is unavailable; serving cached values."
+        )
+
+        source_refresh = status.get("source_refresh", {})
+        prediction = status.get("prediction", {})
+
+        errors = []
+
+        for source_name, result in source_refresh.items():
+            if result.get("error"):
+                errors.append(
+                    f"{source_name}: {result['error']}"
+                )
+
+        if prediction.get("error"):
+            errors.append(
+                f"Prediction: {prediction['error']}"
+            )
+
+        if errors:
+            with st.expander("Refresh details"):
+                for error in errors:
+                    st.caption(error)
+
+        return
+
+    if completed is not None:
+        local = completed.tz_convert("Europe/London")
+        st.caption(
+            "● Live data checked "
+            f"{local.strftime('%d %b · %H:%M %Z')}"
+        )
+    else:
+        st.caption("● Live data refresh active")
+
+
 def calculate_margin_percentile(
     predicted_drm_mw: float,
     history: pd.Series,
