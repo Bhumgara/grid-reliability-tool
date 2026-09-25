@@ -75,7 +75,7 @@ def ensure_deployment_data() -> None:
         )
 
 
-CHECK_EVERY_SECONDS = 15 * 60
+CHECK_EVERY_SECONDS = 150
 
 
 def _refresh_loop() -> None:
