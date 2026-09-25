@@ -19,12 +19,10 @@ Python · SQL · pandas · scikit-learn · Streamlit
 
 ## Getting Started
 
-Implementation is currently in progress. Setup and run instructions will be added once the first end-to-end data pipeline is working.
+Run this command:
 
-The first technical milestone is:
-
-```text
-Elexon API -> raw cache -> normalisation -> SQL
+```bat
+python -m streamlit run app.py
 ```
 
 ## Repository

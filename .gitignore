@@ -236,6 +236,16 @@ data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
+# Model artefacts
+artifacts/*
+
+# Keep artefact directory structure
+!artifacts/.gitkeep
+
+# Trained model binaries
+*.pkl
+*.joblib
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -246,3 +256,4 @@ review-stat.txt
 review-files.txt
 review_run.bat
 deployment_bundle.zip
+/deploy_bundle

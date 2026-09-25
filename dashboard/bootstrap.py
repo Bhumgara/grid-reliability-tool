@@ -22,22 +22,22 @@ import tempfile
 import requests
 
 
-DB_PATH = Path("data/grid.db")
+# dashboard/bootstrap.py -> dashboard -> repo root
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+DB_PATH = PROJECT_ROOT / "data" / "grid.db"
 
 
 def ensure_deployment_data() -> None:
     if DB_PATH.exists():
         return
 
-    url = st.secrets.get(
-        "deployment_bundle_url"
-    )
+    url = st.secrets.get("deployment_bundle_url")
 
     if not url:
         raise RuntimeError(
             "Database is missing and "
-            "'deployment_bundle_url' "
-            "is not configured."
+            "'deployment_bundle_url' is not configured."
         )
 
     with tempfile.NamedTemporaryFile(
@@ -54,16 +54,24 @@ def ensure_deployment_data() -> None:
         zip_path = Path(tmp.name)
 
     with ZipFile(zip_path) as bundle:
-        bundle.extractall(".")
+        print("ZIP contents:", bundle.namelist())
+        bundle.extractall(PROJECT_ROOT)
 
-    zip_path.unlink(
-        missing_ok=True
+    zip_path.unlink(missing_ok=True)
+
+    print("Project root:", PROJECT_ROOT)
+    print("Expected DB:", DB_PATH)
+    print("DB exists:", DB_PATH.exists())
+
+    print(
+        "Extracted data files:",
+        [str(p) for p in PROJECT_ROOT.rglob("grid.db")]
     )
 
     if not DB_PATH.exists():
         raise RuntimeError(
-            "Deployment bundle downloaded "
-            "but data/grid.db was not found."
+            f"Deployment bundle downloaded but database was not found. "
+            f"Expected: {DB_PATH}"
         )
 
 
