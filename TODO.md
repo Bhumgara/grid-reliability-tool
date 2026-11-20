@@ -127,6 +127,7 @@ Needs: 1.2, 1.6, 2.1
 
 - [x] `GET /api/status` (refresh status)
 - [x] `GET /api/forecast/hero` (forecast, margin percentile, bridge steps)
+- [x] Open the database read-only in `core/queries.py`, so a missing `grid.db` raises an error instead of creating an empty file (which would stop `ensure_deployment_data()` downloading the real one); the API returns `503` with an `unavailable` `EmptyState`
 - [ ] `GET /api/grid/now` (current margin, demand and generation metrics)
 - [ ] `GET /api/history/margin` and `/api/history/demand` (`?days=`)
 - [ ] `GET /api/demand/typical-day`

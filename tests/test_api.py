@@ -102,3 +102,22 @@ def test_explicit_origins_override_the_environment(monkeypatch):
     response = client.get("/api/health", headers={"Origin": WEB_ORIGIN})
 
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_missing_database_returns_503_empty_state(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.config.DB_PATH", tmp_path / "grid.db")
+    monkeypatch.setattr("core.config.FORECAST_PATH", tmp_path / "forecast.json")
+    (tmp_path / "forecast.json").write_text('{"predicted_drm_mw": 1}', encoding="utf-8")
+    client = TestClient(create_app([WEB_ORIGIN]))
+
+    response = client.get("/api/forecast/hero", headers={"Origin": WEB_ORIGIN})
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "state": "unavailable",
+        "message": "Grid data is not available yet. Try again shortly.",
+    }
+    # The web build can still read the body.
+    assert response.headers["access-control-allow-origin"] == WEB_ORIGIN
+    # The request did not create an empty database.
+    assert not (tmp_path / "grid.db").exists()

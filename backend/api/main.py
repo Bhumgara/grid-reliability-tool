@@ -13,13 +13,18 @@ Settings come from environment variables; see ``.env.example``.
 
 from __future__ import annotations
 
+import logging
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from backend.api.models import HealthResponse
+from backend.api.models import EmptyState, HealthResponse
 from backend.api.routes import forecast, status
+from core.queries import DatabaseUnavailableError
+
+logger = logging.getLogger(__name__)
 
 API_PREFIX = "/api"
 
@@ -28,6 +33,8 @@ API_PREFIX = "/api"
 # cross-origin access. Only the web build needs this; the native apps don't
 # send an Origin header.
 CORS_ORIGINS_ENV = "GRID_CORS_ORIGINS"
+
+DATABASE_UNAVAILABLE_MESSAGE = "Grid data is not available yet. Try again shortly."
 
 
 def cors_origins_from_env() -> list[str]:
@@ -47,6 +54,16 @@ def create_app(cors_origins: list[str] | None = None) -> FastAPI:
         cors_origins = cors_origins_from_env()
 
     app = FastAPI(title="Grid Reliability API")
+
+    @app.exception_handler(DatabaseUnavailableError)
+    def database_unavailable(
+        request: Request,
+        error: DatabaseUnavailableError,
+    ) -> JSONResponse:
+        # The path stays in the server log, not the response.
+        logger.warning("%s %s: %s", request.method, request.url.path, error)
+        body = EmptyState(state="unavailable", message=DATABASE_UNAVAILABLE_MESSAGE)
+        return JSONResponse(status_code=503, content=body.model_dump())
 
     if cors_origins:
         # The API is read-only, so browsers only need GET (and the preflight).
