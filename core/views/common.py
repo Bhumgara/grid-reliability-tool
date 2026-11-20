@@ -25,3 +25,21 @@ def series_gw(
     out = to_utc(df[[time_col, value_col]].dropna(), time_col)
     out[output_col] = out[value_col] / 1000
     return out
+
+
+def require_columns(
+    df: pd.DataFrame,
+    columns: list[str],
+    context: str,
+) -> None:
+    """Raise ValueError naming any of ``columns`` missing from ``df``."""
+    missing = [
+        column
+        for column in columns
+        if column not in df.columns
+    ]
+
+    if missing:
+        raise ValueError(
+            f"{context} requires columns: {missing}"
+        )

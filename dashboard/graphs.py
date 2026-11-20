@@ -15,7 +15,9 @@ import streamlit as st
 
 ChartSet = dict[str, Any]
 
+from core.views.common import require_columns as _require_columns
 from core.views.common import series_gw as _series_gw
+from core.views.demand import demand_settlement_view
 from core.views.forecast import drm_bridge_view, forecast_view
 from dashboard.styles import (
     DEMAND_PROFILE_COLOURS, 
@@ -769,23 +771,6 @@ def build_validation_graphs(predictions: pd.DataFrame) -> ChartSet:
 # ============================================================
 # Experimental / concept charts
 # ============================================================
-
-def _require_columns(
-    df: pd.DataFrame,
-    columns: list[str],
-    context: str,
-) -> None:
-    missing = [
-        column
-        for column in columns
-        if column not in df.columns
-    ]
-
-    if missing:
-        raise ValueError(
-            f"{context} requires columns: {missing}"
-        )
-
 
 def _latest_generation_snapshot(
     generation: pd.DataFrame,
@@ -2862,45 +2847,12 @@ def build_demand_settlement_bars(
     """
     Settlement-period demand bars.
 
-    Internal missing half-hours are linearly interpolated for display only
-    and explicitly labelled Estimated. Leading/trailing gaps remain blank.
-    Nothing is written back to the source data.
+    Internal missing half-hours are estimated for display (see
+    core.views.demand) and drawn faded, labelled Estimated.
     """
-    _require_columns(
-        demand,
-        [
-            "event_time_utc",
-            "demand_mw",
-        ],
-        "Demand settlement bars",
-    )
+    view = demand_settlement_view(demand)
 
-    data = demand[
-        [
-            "event_time_utc",
-            "demand_mw",
-        ]
-    ].copy()
-
-    data["event_time_utc"] = pd.to_datetime(
-        data["event_time_utc"],
-        utc=True,
-    )
-
-    data = (
-        data.sort_values(
-            "event_time_utc"
-        )
-        .drop_duplicates(
-            "event_time_utc",
-            keep="last",
-        )
-        .set_index(
-            "event_time_utc"
-        )
-    )
-
-    if data.empty:
+    if view.empty:
         return (
             alt.Chart(
                 pd.DataFrame(
@@ -2920,53 +2872,22 @@ def build_demand_settlement_bars(
             )
         )
 
-    complete_index = pd.date_range(
-        start=data.index.min(),
-        end=data.index.max(),
-        freq="30min",
-        tz="UTC",
-    )
-
-    data = data.reindex(
-        complete_index
-    )
-
-    data.index.name = (
-        "event_time_utc"
-    )
-
-    data["data_type"] = (
-        data["demand_mw"]
-        .notna()
-        .map(
+    data = view.assign(
+        data_type=view["estimated"].map(
             {
-                True: "Observed",
-                False: "Estimated",
+                False: "Observed",
+                True: "Estimated",
             }
         )
-    )
-
-    data["display_demand_mw"] = (
-        data["demand_mw"]
-        .interpolate(
-            method="time",
-            limit_area="inside",
-        )
-    )
-
-    data = (
-        data.reset_index()
-        .dropna(
-            subset=[
-                "display_demand_mw"
-            ]
-        )
-    )
-
-    data["demand_gw"] = (
-        data["display_demand_mw"]
-        / 1000
-    )
+    )[
+        [
+            "event_time_utc",
+            "demand_mw",
+            "data_type",
+            "display_demand_mw",
+            "demand_gw",
+        ]
+    ]
 
     return (
         alt.Chart(data)
