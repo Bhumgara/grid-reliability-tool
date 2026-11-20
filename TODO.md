@@ -30,11 +30,11 @@ Settle these before the branch that depends on them.
 
 ### 0.1 `chore/repo-groundwork`
 
-- [ ] Fill in `requirements.txt` with the current dependencies (it is empty), with versions pinned
-- [ ] Fix `.gitignore` so the Python `lib/` rule does not hide Flutter's `app/lib/` (anchor it as `/lib/`)
-- [ ] Add Flutter and Dart ignores (`app/build/`, `.dart_tool/`, `*.iml`, platform build outputs)
-- [ ] Add a `tests/` package with pytest config and an empty smoke test
-- [ ] Add a small fixture SQLite database builder for tests (`tests/fixtures/`)
+- [x] Fill in `requirements.txt` with the current dependencies (it is empty), with versions pinned
+- [x] Fix `.gitignore` so the Python `lib/` rule does not hide Flutter's `app/lib/` (anchor it as `/lib/`)
+- [x] Add Flutter and Dart ignores (`app/build/`, `.dart_tool/`, `*.iml`, platform build outputs)
+- [x] Add a `tests/` package with pytest config and an empty smoke test
+- [x] Add a small fixture SQLite database builder for tests (`tests/fixtures/`)
 
 ---
 

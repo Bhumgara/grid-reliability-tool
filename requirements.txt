@@ -1,0 +1,20 @@
+# Python 3.13
+
+# Data handling
+numpy==2.3.5
+pandas==2.3.3
+
+# Data ingestion (Elexon / NESO APIs)
+requests==2.32.5
+
+# Modelling
+joblib==1.5.2
+scikit-learn==1.7.2
+xgboost==3.4.1
+
+# Model evaluation plots
+matplotlib==3.10.6
+
+# Dashboard (Streamlit front-end)
+altair==5.5.0
+streamlit==1.51.0
