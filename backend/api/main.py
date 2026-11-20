@@ -13,12 +13,20 @@ Settings come from environment variables; see ``.env.example``.
 
 from __future__ import annotations
 
+import logging
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 
-from backend.api.models import HealthResponse
+from backend.api.loaders import Loaders
+from backend.api.models import EmptyState, HealthResponse
+from backend.api.routes import demand, forecast, generation, grid, history, model, status
+from core.queries import DatabaseUnavailableError
+
+logger = logging.getLogger(__name__)
 
 API_PREFIX = "/api"
 
@@ -28,6 +36,14 @@ API_PREFIX = "/api"
 # send an Origin header.
 CORS_ORIGINS_ENV = "GRID_CORS_ORIGINS"
 
+# Responses smaller than this (bytes) aren't worth compressing.
+GZIP_MINIMUM_SIZE = 1000
+# Level 6 gives nearly the same size as the default 9 on this API's JSON in
+# about half the time.
+GZIP_LEVEL = 6
+
+DATABASE_UNAVAILABLE_MESSAGE = "Grid data is not available yet. Try again shortly."
+
 
 def cors_origins_from_env() -> list[str]:
     """The allowed origins from ``GRID_CORS_ORIGINS``, blanks and trailing slashes removed."""
@@ -35,17 +51,33 @@ def cors_origins_from_env() -> list[str]:
     return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
 
 
-def create_app(cors_origins: list[str] | None = None) -> FastAPI:
+def create_app(
+    cors_origins: list[str] | None = None,
+    *,
+    cache: bool = True,
+) -> FastAPI:
     """
     Build the API app.
 
     ``cors_origins`` defaults to ``GRID_CORS_ORIGINS``, read when the app is
-    built.
+    built. ``cache=False`` turns off the loader cache (see
+    ``backend.api.loaders``).
     """
     if cors_origins is None:
         cors_origins = cors_origins_from_env()
 
     app = FastAPI(title="Grid Reliability API")
+    app.state.loaders = Loaders(enabled=cache)
+
+    @app.exception_handler(DatabaseUnavailableError)
+    def database_unavailable(
+        request: Request,
+        error: DatabaseUnavailableError,
+    ) -> JSONResponse:
+        # The path stays in the server log, not the response.
+        logger.warning("%s %s: %s", request.method, request.url.path, error)
+        body = EmptyState(state="unavailable", message=DATABASE_UNAVAILABLE_MESSAGE)
+        return JSONResponse(status_code=503, content=body.model_dump())
 
     if cors_origins:
         # The API is read-only, so browsers only need GET (and the preflight).
@@ -55,10 +87,21 @@ def create_app(cors_origins: list[str] | None = None) -> FastAPI:
             allow_methods=["GET"],
         )
 
+    # Compress large responses (e.g. model validation points) for clients
+    # that send Accept-Encoding: gzip, which browsers and Dart's http do.
+    app.add_middleware(
+        GZipMiddleware,
+        minimum_size=GZIP_MINIMUM_SIZE,
+        compresslevel=GZIP_LEVEL,
+    )
+
     @app.get(f"{API_PREFIX}/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         """Liveness check: the process is up and serving requests."""
         return HealthResponse()
+
+    for module in (status, forecast, grid, history, demand, generation, model):
+        app.include_router(module.router, prefix=API_PREFIX)
 
     return app
 

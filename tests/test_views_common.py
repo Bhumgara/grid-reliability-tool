@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from core.views.common import require_columns, series_gw, to_utc
+from core.views.common import require_columns, series_gw, timestamp_utc_or_none, to_utc
 
 
 def test_to_utc_parses_without_changing_input():
@@ -36,3 +36,26 @@ def test_require_columns_names_missing_columns():
 
     with pytest.raises(ValueError, match=r"Thing requires columns: \['b'\]"):
         require_columns(df, ["a", "b"], "Thing")
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("2026-11-20T10:00:00Z", pd.Timestamp("2026-11-20T10:00:00Z")),
+        ("2026-11-20T11:00:00+01:00", pd.Timestamp("2026-11-20T10:00:00Z")),
+        ("2026-11-20T10:00:00", pd.Timestamp("2026-11-20T10:00:00Z")),
+        (pd.Timestamp("2026-11-20 10:00", tz="Europe/London"), pd.Timestamp("2026-11-20T10:00:00Z")),
+        (None, None),
+        ("", None),
+        ("not a time", None),
+        ("NaT", None),
+        ({"a": 1}, None),
+        (12345678901234567890, None),
+    ],
+)
+def test_timestamp_utc_or_none(raw, expected):
+    result = timestamp_utc_or_none(raw)
+
+    assert result == expected
+    if expected is not None:
+        assert str(result.tz) == "UTC"

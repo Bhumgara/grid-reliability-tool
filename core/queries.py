@@ -23,10 +23,27 @@ import pandas as pd
 from core import config
 
 
+class DatabaseUnavailableError(RuntimeError):
+    """The database file does not exist (e.g. deployment data not set up yet)."""
+
+
 @contextmanager
 def _connect(db_path: Path | None) -> Iterator[sqlite3.Connection]:
+    """
+    Open the database read-only.
+
+    A plain ``sqlite3.connect`` creates an empty file when the database is
+    missing, which would then stop ``ensure_deployment_data`` from downloading
+    the real one. Raises DatabaseUnavailableError instead.
+    """
+    path = Path(db_path or config.DB_PATH).resolve()
+
+    if not path.is_file():
+        raise DatabaseUnavailableError(f"Database not found: {path}")
+
     conn = sqlite3.connect(
-        str(db_path or config.DB_PATH),
+        f"{path.as_uri()}?mode=ro",
+        uri=True,
         timeout=10,
     )
     try:

@@ -102,3 +102,68 @@ def test_explicit_origins_override_the_environment(monkeypatch):
     response = client.get("/api/health", headers={"Origin": WEB_ORIGIN})
 
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_missing_database_returns_503_empty_state(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.config.DB_PATH", tmp_path / "grid.db")
+    monkeypatch.setattr("core.config.FORECAST_PATH", tmp_path / "forecast.json")
+    (tmp_path / "forecast.json").write_text('{"predicted_drm_mw": 1}', encoding="utf-8")
+    client = TestClient(create_app([WEB_ORIGIN]))
+
+    response = client.get("/api/forecast/hero", headers={"Origin": WEB_ORIGIN})
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "state": "unavailable",
+        "message": "Grid data is not available yet. Try again shortly.",
+    }
+    # The web build can still read the body.
+    assert response.headers["access-control-allow-origin"] == WEB_ORIGIN
+    # The request did not create an empty database.
+    assert not (tmp_path / "grid.db").exists()
+
+
+# --- Compression -------------------------------------------------------------
+
+
+def test_large_responses_are_gzipped(grid_db, monkeypatch):
+    monkeypatch.setattr("core.config.DB_PATH", grid_db)
+    client = TestClient(create_app())
+
+    response = client.get("/api/history/margin", headers={"Accept-Encoding": "gzip"})
+
+    assert response.headers["content-encoding"] == "gzip"
+    assert "accept-encoding" in response.headers["vary"].lower()
+    # The client decodes it transparently.
+    assert response.json()["state"] == "ok"
+
+
+def test_small_responses_are_not_gzipped():
+    response = TestClient(create_app()).get(
+        "/api/health", headers={"Accept-Encoding": "gzip"}
+    )
+
+    assert "content-encoding" not in response.headers
+
+
+def test_no_gzip_without_accept_encoding(grid_db, monkeypatch):
+    monkeypatch.setattr("core.config.DB_PATH", grid_db)
+    client = TestClient(create_app())
+
+    response = client.get("/api/history/margin", headers={"Accept-Encoding": "identity"})
+
+    assert "content-encoding" not in response.headers
+    assert response.json()["state"] == "ok"
+
+
+def test_gzipped_responses_keep_cors_headers(grid_db, monkeypatch):
+    monkeypatch.setattr("core.config.DB_PATH", grid_db)
+    client = TestClient(create_app([WEB_ORIGIN]))
+
+    response = client.get(
+        "/api/history/margin",
+        headers={"Origin": WEB_ORIGIN, "Accept-Encoding": "gzip"},
+    )
+
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.headers["access-control-allow-origin"] == WEB_ORIGIN

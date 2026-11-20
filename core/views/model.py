@@ -6,7 +6,75 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from core.views.common import require_columns
+from core.views.common import require_columns, timestamp_utc_or_none
+
+
+VALIDATION_COLUMNS = [
+    "target_time_utc",
+    "target_drm_mw",
+    "predicted_drm_mw",
+    "error_mw",
+    "absolute_error_mw",
+]
+
+
+@dataclass(frozen=True)
+class ModelMetricsView:
+    """Final holdout scores from ``artifacts/metrics.json``, in GW."""
+
+    model: str
+    alpha: float | None
+    forecast_horizon_hours: int | None
+    model_mae_gw: float
+    baseline_mae_gw: float
+    mae_improvement_pct: float
+    model_rmse_gw: float | None
+    baseline_rmse_gw: float | None
+    test_start_utc: pd.Timestamp | None
+    test_end_utc: pd.Timestamp | None
+    test_rows: int | None
+
+
+def _optional_number(metrics: dict, key: str, kind=float):
+    try:
+        return kind(metrics[key])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def model_metrics_view(
+    metrics: dict,
+) -> ModelMetricsView:
+    """
+    Build the metrics view from ``load_model_metrics`` output.
+
+    Raises ValueError if the three scores the dashboard shows
+    (``model_mae_mw``, ``baseline_mae_mw``, ``mae_improvement_pct``) are
+    missing or not numbers. Other fields are optional.
+    """
+    try:
+        model_mae = float(metrics["model_mae_mw"])
+        baseline_mae = float(metrics["baseline_mae_mw"])
+        improvement = float(metrics["mae_improvement_pct"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("The saved model metrics are incomplete.") from error
+
+    model_rmse = _optional_number(metrics, "model_rmse_mw")
+    baseline_rmse = _optional_number(metrics, "baseline_rmse_mw")
+
+    return ModelMetricsView(
+        model=str(metrics.get("model") or "Unknown model"),
+        alpha=_optional_number(metrics, "alpha"),
+        forecast_horizon_hours=_optional_number(metrics, "forecast_horizon_hours", int),
+        model_mae_gw=model_mae / 1000,
+        baseline_mae_gw=baseline_mae / 1000,
+        mae_improvement_pct=improvement,
+        model_rmse_gw=model_rmse / 1000 if model_rmse is not None else None,
+        baseline_rmse_gw=baseline_rmse / 1000 if baseline_rmse is not None else None,
+        test_start_utc=timestamp_utc_or_none(metrics.get("test_start")),
+        test_end_utc=timestamp_utc_or_none(metrics.get("test_end")),
+        test_rows=_optional_number(metrics, "test_rows", int),
+    )
 
 
 def validation_view(
@@ -20,7 +88,15 @@ def validation_view(
     ``absolute_error_mw``. Returns a copy with ``target_time_utc`` parsed as
     UTC and ``actual_gw``, ``predicted_gw``, ``error_gw`` and
     ``absolute_error_gw`` added; other columns are kept.
+
+    Raises ValueError if any expected column is missing.
     """
+    require_columns(
+        predictions,
+        VALIDATION_COLUMNS,
+        "Validation predictions",
+    )
+
     data = predictions.copy()
     data["target_time_utc"] = pd.to_datetime(data["target_time_utc"], utc=True)
     data["actual_gw"] = data["target_drm_mw"] / 1000

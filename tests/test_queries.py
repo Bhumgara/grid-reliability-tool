@@ -106,17 +106,17 @@ def test_margin_history_excludes_nulls_and_other_horizons(grid_db):
     assert history.notna().all()
 
 
-@pytest.mark.parametrize(
-    "loader",
-    [
-        queries.load_recent_margin,
-        queries.load_recent_demand,
-        queries.load_recent_generation,
-        queries.load_live_generation_mix,
-        queries.load_live_interconnectors,
-        queries.load_margin_history,
-    ],
-)
+DATABASE_LOADERS = [
+    queries.load_recent_margin,
+    queries.load_recent_demand,
+    queries.load_recent_generation,
+    queries.load_live_generation_mix,
+    queries.load_live_interconnectors,
+    queries.load_margin_history,
+]
+
+
+@pytest.mark.parametrize("loader", DATABASE_LOADERS)
 def test_database_loaders_return_empty_on_empty_db(loader, empty_grid_db):
     assert len(loader(db_path=empty_grid_db)) == 0
 
@@ -125,6 +125,32 @@ def test_loaders_default_to_config_db_path(grid_db, monkeypatch):
     monkeypatch.setattr("core.config.DB_PATH", grid_db)
 
     assert len(queries.load_recent_demand(7)) == WEEK
+
+
+@pytest.mark.parametrize("loader", DATABASE_LOADERS)
+def test_missing_database_raises_and_is_not_created(loader, tmp_path):
+    missing = tmp_path / "grid.db"
+
+    with pytest.raises(queries.DatabaseUnavailableError, match="Database not found"):
+        loader(db_path=missing)
+
+    assert not missing.exists()
+
+
+def test_database_is_opened_read_only(grid_db):
+    with queries._connect(grid_db) as conn:
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            conn.execute("DELETE FROM elexon_demand_indo")
+
+    assert len(queries.load_recent_demand(7, db_path=grid_db)) == WEEK
+
+
+def test_database_path_with_spaces(grid_db, tmp_path):
+    spaced = tmp_path / "folder with spaces" / "grid #1.db"
+    spaced.parent.mkdir()
+    spaced.write_bytes(grid_db.read_bytes())
+
+    assert len(queries.load_recent_demand(7, db_path=spaced)) == WEEK
 
 
 # --- File loaders -----------------------------------------------------------
