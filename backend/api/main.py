@@ -14,11 +14,11 @@ Settings come from environment variables; see ``.env.example``.
 from __future__ import annotations
 
 import os
-from typing import Literal
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+
+from backend.api.models import HealthResponse
 
 API_PREFIX = "/api"
 
@@ -27,10 +27,6 @@ API_PREFIX = "/api"
 # cross-origin access. Only the web build needs this; the native apps don't
 # send an Origin header.
 CORS_ORIGINS_ENV = "GRID_CORS_ORIGINS"
-
-
-class HealthResponse(BaseModel):
-    status: Literal["ok"] = "ok"
 
 
 def cors_origins_from_env() -> list[str]:
