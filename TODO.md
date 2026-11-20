@@ -69,7 +69,7 @@ Needs: 1.1. Pull the pandas data preparation out of each live chart builder in
 
 Needs: 0.1. Can run in parallel with 1.1 and 1.2.
 
-- [ ] Export `PALETTE`, `FUEL_COLOURS`, `MODEL_COLOURS` and `DEMAND_PROFILE_COLOURS` to `tokens/tokens.json`
+- [x] Export `PALETTE`, `FUEL_COLOURS`, `MODEL_COLOURS` and `DEMAND_PROFILE_COLOURS` to `tokens/tokens.json`
 - [ ] Make `dashboard/styles.py` load its colours from `tokens.json`
 - [ ] Add dark-mode values for each token
 
