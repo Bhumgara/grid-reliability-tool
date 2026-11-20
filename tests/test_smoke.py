@@ -44,7 +44,6 @@ def test_dashboard_bootstrap_shares_config_paths():
     from dashboard import bootstrap
 
     assert bootstrap.DB_PATH is core.config.DB_PATH
-    assert bootstrap.PROJECT_ROOT is core.config.PROJECT_ROOT
 
 
 def test_schema_file_present():

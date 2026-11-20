@@ -13,61 +13,31 @@ import time
 
 import streamlit as st
 
-from core.config import DB_PATH, PROJECT_ROOT
+from core import deployment
+from core.config import DB_PATH
 from pipelines.refresh import refresh_live_data
 
-from pathlib import Path
-from zipfile import ZipFile
-import tempfile
 
-import requests
+def _secret_bundle_url() -> str | None:
+    """The bundle URL from Streamlit secrets, or None if there is no secrets file."""
+    try:
+        return st.secrets.get("deployment_bundle_url")
+    except FileNotFoundError:
+        return None
 
 
 def ensure_deployment_data() -> None:
+    """
+    Download the deployment bundle on first run (see core.deployment).
+
+    The URL comes from the ``deployment_bundle_url`` Streamlit secret, falling
+    back to the DEPLOYMENT_BUNDLE_URL environment variable. Secrets are only
+    read when the database is missing.
+    """
     if DB_PATH.exists():
         return
 
-    url = st.secrets.get("deployment_bundle_url")
-
-    if not url:
-        raise RuntimeError(
-            "Database is missing and "
-            "'deployment_bundle_url' is not configured."
-        )
-
-    with tempfile.NamedTemporaryFile(
-        suffix=".zip",
-        delete=False,
-    ) as tmp:
-        response = requests.get(
-            url,
-            timeout=120,
-        )
-        response.raise_for_status()
-
-        tmp.write(response.content)
-        zip_path = Path(tmp.name)
-
-    with ZipFile(zip_path) as bundle:
-        print("ZIP contents:", bundle.namelist())
-        bundle.extractall(PROJECT_ROOT)
-
-    zip_path.unlink(missing_ok=True)
-
-    print("Project root:", PROJECT_ROOT)
-    print("Expected DB:", DB_PATH)
-    print("DB exists:", DB_PATH.exists())
-
-    print(
-        "Extracted data files:",
-        [str(p) for p in PROJECT_ROOT.rglob("grid.db")]
-    )
-
-    if not DB_PATH.exists():
-        raise RuntimeError(
-            f"Deployment bundle downloaded but database was not found. "
-            f"Expected: {DB_PATH}"
-        )
+    deployment.ensure_deployment_data(bundle_url=_secret_bundle_url())
 
 
 CHECK_EVERY_SECONDS = 150
