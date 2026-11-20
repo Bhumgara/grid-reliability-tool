@@ -10,8 +10,8 @@ import pandas as pd
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from backend.api.loaders import LoadersDep
 from backend.api.models import DataResponse, EmptyState, UtcDatetime
-from core import queries
 from core.views.common import timestamp_utc_or_none
 from core.views.generation import generation_change_view, generation_mix_view
 from core.views.interconnectors import interconnector_view
@@ -78,8 +78,8 @@ class InterconnectorsResponse(DataResponse):
 
 
 @router.get("/generation/live", response_model=GenerationLiveResponse | EmptyState)
-def get_generation_live() -> GenerationLiveResponse | EmptyState:
-    live = queries.load_live_generation_mix()
+def get_generation_live(loaders: LoadersDep) -> GenerationLiveResponse | EmptyState:
+    live = loaders.load_live_generation_mix()
 
     if live.empty:
         return EmptyState(state="unavailable", message="Live generation data is unavailable.")
@@ -107,8 +107,8 @@ def get_generation_live() -> GenerationLiveResponse | EmptyState:
 
 
 @router.get("/generation/change", response_model=GenerationChangeResponse | EmptyState)
-def get_generation_change() -> GenerationChangeResponse | EmptyState:
-    generation = queries.load_recent_generation(CHANGE_HISTORY_DAYS)
+def get_generation_change(loaders: LoadersDep) -> GenerationChangeResponse | EmptyState:
+    generation = loaders.load_recent_generation(CHANGE_HISTORY_DAYS)
 
     if generation.empty:
         return EmptyState(state="unavailable", message="Generation data is unavailable.")
@@ -138,8 +138,8 @@ def get_generation_change() -> GenerationChangeResponse | EmptyState:
 
 
 @router.get("/interconnectors/live", response_model=InterconnectorsResponse | EmptyState)
-def get_interconnectors_live() -> InterconnectorsResponse | EmptyState:
-    interconnectors = queries.load_live_interconnectors()
+def get_interconnectors_live(loaders: LoadersDep) -> InterconnectorsResponse | EmptyState:
+    interconnectors = loaders.load_live_interconnectors()
 
     if interconnectors.empty:
         return EmptyState(state="unavailable", message="No current interconnector data.")

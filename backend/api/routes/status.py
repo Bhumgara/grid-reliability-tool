@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from backend.api.loaders import LoadersDep
 from backend.api.models import DataResponse, UtcDatetime
-from core import queries
 from core.views.status import RefreshState, refresh_status_view
 
 router = APIRouter()
@@ -38,8 +38,8 @@ class StatusResponse(DataResponse):
 
 
 @router.get("/status", response_model=StatusResponse)
-def get_status() -> StatusResponse:
-    view = refresh_status_view(queries.load_refresh_status())
+def get_status(loaders: LoadersDep) -> StatusResponse:
+    view = refresh_status_view(loaders.load_refresh_status())
 
     return StatusResponse(
         as_of_utc=view.completed_at_utc,

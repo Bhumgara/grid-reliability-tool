@@ -7,8 +7,8 @@ from typing import Literal
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from backend.api.loaders import LoadersDep
 from backend.api.models import DataResponse, EmptyState, UtcDatetime
-from core import queries
 from core.views.forecast import forecast_hero_view
 
 router = APIRouter()
@@ -49,15 +49,15 @@ class ForecastHeroResponse(DataResponse):
     "/forecast/hero",
     response_model=ForecastHeroResponse | EmptyState,
 )
-def get_forecast_hero() -> ForecastHeroResponse | EmptyState:
-    forecast = queries.load_latest_forecast()
-    margin = queries.load_recent_margin(RECENT_MARGIN_DAYS)
+def get_forecast_hero(loaders: LoadersDep) -> ForecastHeroResponse | EmptyState:
+    forecast = loaders.load_latest_forecast()
+    margin = loaders.load_recent_margin(RECENT_MARGIN_DAYS)
 
     if forecast is None or margin.empty:
         return EmptyState(state="unavailable", message=NO_FORECAST_MESSAGE)
 
     try:
-        view = forecast_hero_view(forecast, margin, queries.load_margin_history())
+        view = forecast_hero_view(forecast, margin, loaders.load_margin_history())
     except ValueError as error:
         return EmptyState.from_error(error)
 

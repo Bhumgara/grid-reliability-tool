@@ -7,8 +7,8 @@ from typing import Literal
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from backend.api.loaders import LoadersDep
 from backend.api.models import DataResponse, EmptyState, UtcDatetime
-from core import queries
 from core.views.model import (
     model_metrics_view,
     model_vs_persistence_view,
@@ -70,8 +70,8 @@ class ModelValidationResponse(DataResponse):
 
 
 @router.get("/model/metrics", response_model=ModelMetricsResponse | EmptyState)
-def get_model_metrics() -> ModelMetricsResponse | EmptyState:
-    metrics = queries.load_model_metrics()
+def get_model_metrics(loaders: LoadersDep) -> ModelMetricsResponse | EmptyState:
+    metrics = loaders.load_model_metrics()
 
     if not metrics:
         return EmptyState(state="unavailable", message="Final model metrics are unavailable.")
@@ -98,8 +98,8 @@ def get_model_metrics() -> ModelMetricsResponse | EmptyState:
 
 
 @router.get("/model/validation", response_model=ModelValidationResponse | EmptyState)
-def get_model_validation() -> ModelValidationResponse | EmptyState:
-    predictions = queries.load_validation_predictions()
+def get_model_validation(loaders: LoadersDep) -> ModelValidationResponse | EmptyState:
+    predictions = loaders.load_validation_predictions()
 
     if predictions.empty:
         return EmptyState(state="unavailable", message="Validation predictions are unavailable.")

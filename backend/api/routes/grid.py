@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from backend.api.loaders import LoadersDep
 from backend.api.models import DataResponse, EmptyState, UtcDatetime
-from core import queries
 from core.views.grid_now import grid_now_view
 
 router = APIRouter()
@@ -34,9 +34,9 @@ class GridNowResponse(DataResponse):
 
 
 @router.get("/grid/now", response_model=GridNowResponse | EmptyState)
-def get_grid_now() -> GridNowResponse | EmptyState:
-    margin = queries.load_recent_margin(RECENT_DAYS)
-    demand = queries.load_recent_demand(RECENT_DAYS)
+def get_grid_now(loaders: LoadersDep) -> GridNowResponse | EmptyState:
+    margin = loaders.load_recent_margin(RECENT_DAYS)
+    demand = loaders.load_recent_demand(RECENT_DAYS)
 
     if margin.empty or demand.empty:
         return EmptyState(state="unavailable", message=NO_CONTEXT_MESSAGE)
@@ -45,7 +45,7 @@ def get_grid_now() -> GridNowResponse | EmptyState:
         view = grid_now_view(
             margin,
             demand,
-            queries.load_recent_generation(RECENT_DAYS),
+            loaders.load_recent_generation(RECENT_DAYS),
         )
     except ValueError as error:
         return EmptyState.from_error(error)

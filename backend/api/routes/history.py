@@ -7,8 +7,8 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
+from backend.api.loaders import LoadersDep
 from backend.api.models import DataResponse, EmptyState, UtcDatetime
-from core import queries
 from core.views.common import series_gw
 from core.views.demand import demand_settlement_view
 
@@ -52,8 +52,11 @@ class DemandHistoryResponse(DataResponse):
 
 
 @router.get("/history/margin", response_model=MarginHistoryResponse | EmptyState)
-def get_margin_history(days: Days = DEFAULT_DAYS) -> MarginHistoryResponse | EmptyState:
-    margin = queries.load_recent_margin(days)
+def get_margin_history(
+    loaders: LoadersDep,
+    days: Days = DEFAULT_DAYS,
+) -> MarginHistoryResponse | EmptyState:
+    margin = loaders.load_recent_margin(days)
 
     if margin.empty:
         return EmptyState(state="unavailable", message="Margin history is unavailable.")
@@ -68,8 +71,11 @@ def get_margin_history(days: Days = DEFAULT_DAYS) -> MarginHistoryResponse | Emp
 
 
 @router.get("/history/demand", response_model=DemandHistoryResponse | EmptyState)
-def get_demand_history(days: Days = DEFAULT_DAYS) -> DemandHistoryResponse | EmptyState:
-    demand = queries.load_recent_demand(days)
+def get_demand_history(
+    loaders: LoadersDep,
+    days: Days = DEFAULT_DAYS,
+) -> DemandHistoryResponse | EmptyState:
+    demand = loaders.load_recent_demand(days)
 
     if demand.empty:
         return EmptyState(state="unavailable", message="Demand history is unavailable.")

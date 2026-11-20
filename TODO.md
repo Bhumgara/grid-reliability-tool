@@ -133,7 +133,8 @@ Needs: 1.2, 1.6, 2.1
 - [x] `GET /api/demand/typical-day`
 - [x] `GET /api/generation/live`, `/api/generation/change` and `/api/interconnectors/live`
 - [x] `GET /api/model/metrics` and `/api/model/validation`
-- [ ] Add a server-side TTL cache matching the current 45 s and 15 s TTLs
+- [x] Add a server-side TTL cache matching the current 45 s and 15 s TTLs
+- [ ] Compress responses with `GZipMiddleware` (the validation points can reach about 1.2 MB of JSON)
 - [ ] Add a script that exports the OpenAPI schema to `backend/openapi.json`
 
 ### 2.3 `feature/refresh-worker`

@@ -8,8 +8,8 @@ import pandas as pd
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from backend.api.loaders import LoadersDep
 from backend.api.models import DataResponse, EmptyState
-from core import queries
 from core.views.demand import typical_day_view
 
 router = APIRouter()
@@ -53,8 +53,8 @@ def _profile(frame: pd.DataFrame) -> list[ProfilePoint]:
 
 
 @router.get("/demand/typical-day", response_model=TypicalDayResponse | EmptyState)
-def get_typical_day() -> TypicalDayResponse | EmptyState:
-    demand = queries.load_recent_demand(HISTORY_DAYS)
+def get_typical_day(loaders: LoadersDep) -> TypicalDayResponse | EmptyState:
+    demand = loaders.load_recent_demand(HISTORY_DAYS)
 
     if demand.empty:
         return EmptyState(state="unavailable", message="Demand history is unavailable.")

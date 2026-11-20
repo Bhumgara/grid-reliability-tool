@@ -49,6 +49,8 @@ def test_generation_live_embedded_forecast_and_missing(db, client):
 
     with sqlite3.connect(db) as conn:
         conn.execute("DELETE FROM neso_demand_update")
+    # The API caches the mix for 45 seconds; drop it to see the change.
+    client.app.state.loaders.clear()
     assert client.get("/api/generation/live").json()["embedded_is_actual"] is None
 
 

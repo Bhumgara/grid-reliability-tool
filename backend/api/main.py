@@ -20,6 +20,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from backend.api.loaders import Loaders
 from backend.api.models import EmptyState, HealthResponse
 from backend.api.routes import demand, forecast, generation, grid, history, model, status
 from core.queries import DatabaseUnavailableError
@@ -43,17 +44,23 @@ def cors_origins_from_env() -> list[str]:
     return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
 
 
-def create_app(cors_origins: list[str] | None = None) -> FastAPI:
+def create_app(
+    cors_origins: list[str] | None = None,
+    *,
+    cache: bool = True,
+) -> FastAPI:
     """
     Build the API app.
 
     ``cors_origins`` defaults to ``GRID_CORS_ORIGINS``, read when the app is
-    built.
+    built. ``cache=False`` turns off the loader cache (see
+    ``backend.api.loaders``).
     """
     if cors_origins is None:
         cors_origins = cors_origins_from_env()
 
     app = FastAPI(title="Grid Reliability API")
+    app.state.loaders = Loaders(enabled=cache)
 
     @app.exception_handler(DatabaseUnavailableError)
     def database_unavailable(
