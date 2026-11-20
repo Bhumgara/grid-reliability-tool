@@ -24,19 +24,16 @@ def test_mappings_reference_palette_names(mapping):
 
 
 @pytest.mark.parametrize(
-    ("mapping", "expected"),
+    ("mapping", "resolved"),
     [
         ("fuel_colours", styles.FUEL_COLOURS),
         ("model_colours", styles.MODEL_COLOURS),
         ("demand_profile_colours", styles.DEMAND_PROFILE_COLOURS),
     ],
 )
-def test_tokens_match_dashboard_styles(mapping, expected):
-    palette = TOKENS["palette"]
-    resolved = {key: palette[name] for key, name in TOKENS[mapping].items()}
-
-    assert resolved == expected
-
-
-def test_palette_matches_dashboard_styles():
-    assert TOKENS["palette"] == styles.PALETTE
+def test_styles_resolve_mappings_to_hex(mapping, resolved):
+    assert styles.PALETTE == TOKENS["palette"]
+    assert resolved == {
+        key: TOKENS["palette"][name]
+        for key, name in TOKENS[mapping].items()
+    }
