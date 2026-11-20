@@ -7,7 +7,8 @@ from typing import Literal
 
 import pandas as pd
 
-from core.views.common import series_gw
+from core.margin import calculate_margin_percentile, describe_margin_percentile
+from core.views.common import series_gw, timestamp_utc_or_none
 
 
 @dataclass(frozen=True)
@@ -98,4 +99,68 @@ def drm_bridge_view(
         direction=direction,
         axis_min_gw=lower - padding,
         axis_max_gw=upper + padding,
+    )
+
+
+@dataclass(frozen=True)
+class ForecastHeroView:
+    """
+    The headline forecast: predicted margin, how it compares with history,
+    and the change from the latest published margin.
+
+    ``latest_drm_gw`` is the latest published 1-hour-ahead margin (as the
+    dashboard shows), not the forecast file's ``latest_drm_mw`` input.
+    """
+
+    target_time_utc: pd.Timestamp
+    forecast_origin_utc: pd.Timestamp | None
+    generated_at_utc: pd.Timestamp | None
+    predicted_drm_gw: float
+    latest_drm_gw: float
+    latest_time_utc: pd.Timestamp | None
+    # Percentage of historical margins below the prediction (0-100).
+    percentile: float
+    percentile_description: str
+    bridge: DrmBridgeView
+
+
+def forecast_hero_view(
+    forecast: dict,
+    recent_margin: pd.DataFrame,
+    margin_history: pd.Series,
+) -> ForecastHeroView:
+    """
+    Build the hero view from ``load_latest_forecast``, ``load_recent_margin``
+    and ``load_margin_history`` output.
+
+    Raises ValueError if there is no recent margin, or the forecast is missing
+    ``target_time_utc`` or ``predicted_drm_mw``.
+    """
+    if recent_margin.empty:
+        raise ValueError("No recent de-rated margin to compare the forecast with.")
+
+    target = timestamp_utc_or_none(forecast.get("target_time_utc"))
+
+    try:
+        predicted_mw = float(forecast["predicted_drm_mw"])
+    except (KeyError, TypeError, ValueError):
+        predicted_mw = None
+
+    if target is None or predicted_mw is None:
+        raise ValueError("The saved forecast is incomplete.")
+
+    latest = recent_margin.iloc[-1]
+    latest_mw = float(latest["derated_margin_mw"])
+    percentile = calculate_margin_percentile(predicted_mw, margin_history)
+
+    return ForecastHeroView(
+        target_time_utc=target,
+        forecast_origin_utc=timestamp_utc_or_none(forecast.get("forecast_origin_utc")),
+        generated_at_utc=timestamp_utc_or_none(forecast.get("generated_at_utc")),
+        predicted_drm_gw=predicted_mw / 1000,
+        latest_drm_gw=latest_mw / 1000,
+        latest_time_utc=timestamp_utc_or_none(latest["event_time_utc"]),
+        percentile=percentile,
+        percentile_description=describe_margin_percentile(percentile),
+        bridge=drm_bridge_view({"predicted_drm_mw": predicted_mw}, latest_mw),
     )

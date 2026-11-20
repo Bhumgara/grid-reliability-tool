@@ -7,6 +7,8 @@ from typing import Literal
 
 import pandas as pd
 
+from core.views.common import timestamp_utc_or_none
+
 RefreshState = Literal[
     # No status file yet: the refresh worker has not finished a first check.
     "starting",
@@ -49,22 +51,6 @@ class RefreshStatusView:
     errors: tuple[str, ...]
 
 
-def _utc_or_none(raw) -> pd.Timestamp | None:
-    """Parse a timestamp from the status file; None if missing or malformed."""
-    if not raw:
-        return None
-
-    try:
-        ts = pd.Timestamp(raw)
-    except (ValueError, TypeError):
-        return None
-
-    if ts is pd.NaT:
-        return None
-
-    return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
-
-
 def _float_or_none(raw) -> float | None:
     try:
         return None if raw is None else float(raw)
@@ -80,7 +66,7 @@ def _sources(raw) -> tuple[SourceStatus, ...]:
         SourceStatus(
             name=str(details.get("name") or key),
             required=bool(details.get("required", False)),
-            latest_event_utc=_utc_or_none(details.get("latest_event_utc")),
+            latest_event_utc=timestamp_utc_or_none(details.get("latest_event_utc")),
             age_minutes=_float_or_none(details.get("age_minutes")),
             stale=bool(details.get("stale", True)),
         )
@@ -137,9 +123,9 @@ def refresh_status_view(status: dict) -> RefreshStatusView:
     return RefreshStatusView(
         state=state,
         message=str(status.get("message") or ""),
-        started_at_utc=_utc_or_none(status.get("started_at_utc")),
-        completed_at_utc=_utc_or_none(status.get("completed_at_utc")),
-        forecast_generated_at_utc=_utc_or_none(generated),
+        started_at_utc=timestamp_utc_or_none(status.get("started_at_utc")),
+        completed_at_utc=timestamp_utc_or_none(status.get("completed_at_utc")),
+        forecast_generated_at_utc=timestamp_utc_or_none(generated),
         sources=_sources(status.get("sources")),
         errors=_errors(status),
     )
