@@ -90,7 +90,7 @@ Needs: the merge of `main` into `flutter-front-end-migration`. Small fixes for
 loose ends that merge left behind.
 
 - [x] Record the post-merge follow-ups in `TODO.md`
-- [ ] Remove the unused `from xgboost import XGBRegressor` in `model/train.py` (xgboost is no longer a dependency)
+- [x] Remove the unused `from xgboost import XGBRegressor` in `model/train.py` (xgboost is no longer a dependency)
 - [ ] Add `.gitignore` exceptions for the committed `artifacts/` files (`metrics.json`, `feature_columns.json`, `ridge_drm_24h.joblib`)
 - [ ] Fix the "every 15 minutes" comment in `app.py` (the refresh check now runs every 150 seconds)
 
