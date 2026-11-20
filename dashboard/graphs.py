@@ -16,7 +16,7 @@ import streamlit as st
 ChartSet = dict[str, Any]
 
 from core.views.common import series_gw as _series_gw
-from core.views.forecast import forecast_view
+from core.views.forecast import drm_bridge_view, forecast_view
 from dashboard.styles import (
     DEMAND_PROFILE_COLOURS, 
     FUEL_COLOURS, 
@@ -1098,56 +1098,22 @@ def build_drm_change_bridge(
     pixel offsets, so the points and labels remain inside the plot when
     the Streamlit column changes width.
     """
-    latest = (
-        float(
-            current_drm_mw
-        )
-        / 1000
-    )
+    view = drm_bridge_view(forecast, current_drm_mw)
 
-    predicted = (
-        float(
-            forecast["predicted_drm_mw"]
-        )
-        / 1000
-    )
-
-    delta = predicted - latest
-
-    lower = min(
-        latest,
-        predicted,
-    )
-
-    upper = max(
-        latest,
-        predicted,
-    )
-
-    span = max(
-        upper - lower,
-        0.5,
-    )
-
-    padding = max(
-        span * 0.30,
-        0.65,
-    )
+    latest = view.current_drm_gw
+    predicted = view.predicted_drm_gw
+    delta = view.change_gw
 
     x_domain = [
-        lower - padding,
-        upper + padding,
+        view.axis_min_gw,
+        view.axis_max_gw,
     ]
 
-    direction = (
-        "↑"
-        if delta > 0
-        else (
-            "↓"
-            if delta < 0
-            else "→"
-        )
-    )
+    direction = {
+        "up": "↑",
+        "down": "↓",
+        "flat": "→",
+    }[view.direction]
 
     points = pd.DataFrame(
         {
@@ -1255,7 +1221,7 @@ def build_drm_change_bridge(
         )
     )
 
-    if delta > 0:
+    if view.direction == "up":
         arrow_shape = "triangle-right"
 
         current_align = "right"
@@ -1264,7 +1230,7 @@ def build_drm_change_bridge(
         forecast_align = "left"
         forecast_dx = 10
 
-    elif delta < 0:
+    elif view.direction == "down":
         arrow_shape = "triangle-left"
 
         current_align = "left"
