@@ -46,5 +46,28 @@ def test_dashboard_bootstrap_shares_config_paths():
     assert bootstrap.DB_PATH is core.config.DB_PATH
 
 
+def test_refresh_loop_sleeps_for_shared_interval(monkeypatch):
+    import core.config
+    from dashboard import bootstrap
+
+    class StopLoop(Exception):
+        pass
+
+    slept = []
+
+    def fake_sleep(seconds):
+        slept.append(seconds)
+        raise StopLoop
+
+    monkeypatch.setattr(bootstrap, "refresh_live_data", lambda: None)
+    monkeypatch.setattr(bootstrap.time, "sleep", fake_sleep)
+
+    with pytest.raises(StopLoop):
+        bootstrap._refresh_loop()
+
+    assert slept == [core.config.REFRESH_CHECK_SECONDS]
+    assert core.config.REFRESH_CHECK_SECONDS == 150
+
+
 def test_schema_file_present():
     assert Path("sql/schema.sql").is_file()

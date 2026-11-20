@@ -14,7 +14,7 @@ import time
 import streamlit as st
 
 from core import deployment
-from core.config import DB_PATH
+from core.config import DB_PATH, REFRESH_CHECK_SECONDS
 from pipelines.refresh import refresh_live_data
 
 
@@ -40,9 +40,6 @@ def ensure_deployment_data() -> None:
     deployment.ensure_deployment_data(bundle_url=_secret_bundle_url())
 
 
-CHECK_EVERY_SECONDS = 150
-
-
 def _refresh_loop() -> None:
     while True:
         try:
@@ -53,7 +50,7 @@ def _refresh_loop() -> None:
                 f"{type(exc).__name__}: {exc}"
             )
 
-        time.sleep(CHECK_EVERY_SECONDS)
+        time.sleep(REFRESH_CHECK_SECONDS)
 
 
 @st.cache_resource(show_spinner=False)

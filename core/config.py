@@ -35,3 +35,8 @@ TEST_PATH = PROCESSED_DIR / "test_predictions.csv"
 
 # Scores saved by the chart design tester (dashboard/swiper.py).
 SWIPER_RESULTS_PATH = PROJECT_ROOT / "results.json"
+
+# How often the live refresh loop checks for stale data, in seconds. Each check
+# only calls the external APIs for data that is out of date
+# (see pipelines.refresh). Shared by the dashboard thread and the API worker.
+REFRESH_CHECK_SECONDS = 150
