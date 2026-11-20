@@ -1,10 +1,10 @@
 import json
 import sqlite3
-from pathlib import Path
 
 import joblib
 import pandas as pd
 
+from core import config
 from core.config import DB_PATH
 from model.features import (
     add_calendar_features,
@@ -25,17 +25,11 @@ from pipelines.helper import (
 )
 
 
-MODEL_PATH = Path(
-    "artifacts/ridge_drm_24h.joblib"
-)
+MODEL_PATH = config.MODEL_PATH
 
-FEATURE_COLUMNS_PATH = Path(
-    "artifacts/feature_columns.json"
-)
+FEATURE_COLUMNS_PATH = config.FEATURE_COLUMNS_PATH
 
-OUTPUT_PATH = Path(
-    "data/processed/latest_forecast.json"
-)
+OUTPUT_PATH = config.FORECAST_PATH
 
 FORECAST_HORIZON_HOURS = 24
 

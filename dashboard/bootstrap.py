@@ -13,69 +13,31 @@ import time
 
 import streamlit as st
 
+from core import deployment
+from core.config import DB_PATH, REFRESH_CHECK_SECONDS
 from pipelines.refresh import refresh_live_data
 
-from pathlib import Path
-from zipfile import ZipFile
-import tempfile
 
-import requests
-
-
-# dashboard/bootstrap.py -> dashboard -> repo root
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-DB_PATH = PROJECT_ROOT / "data" / "grid.db"
+def _secret_bundle_url() -> str | None:
+    """The bundle URL from Streamlit secrets, or None if there is no secrets file."""
+    try:
+        return st.secrets.get("deployment_bundle_url")
+    except FileNotFoundError:
+        return None
 
 
 def ensure_deployment_data() -> None:
+    """
+    Download the deployment bundle on first run (see core.deployment).
+
+    The URL comes from the ``deployment_bundle_url`` Streamlit secret, falling
+    back to the DEPLOYMENT_BUNDLE_URL environment variable. Secrets are only
+    read when the database is missing.
+    """
     if DB_PATH.exists():
         return
 
-    url = st.secrets.get("deployment_bundle_url")
-
-    if not url:
-        raise RuntimeError(
-            "Database is missing and "
-            "'deployment_bundle_url' is not configured."
-        )
-
-    with tempfile.NamedTemporaryFile(
-        suffix=".zip",
-        delete=False,
-    ) as tmp:
-        response = requests.get(
-            url,
-            timeout=120,
-        )
-        response.raise_for_status()
-
-        tmp.write(response.content)
-        zip_path = Path(tmp.name)
-
-    with ZipFile(zip_path) as bundle:
-        print("ZIP contents:", bundle.namelist())
-        bundle.extractall(PROJECT_ROOT)
-
-    zip_path.unlink(missing_ok=True)
-
-    print("Project root:", PROJECT_ROOT)
-    print("Expected DB:", DB_PATH)
-    print("DB exists:", DB_PATH.exists())
-
-    print(
-        "Extracted data files:",
-        [str(p) for p in PROJECT_ROOT.rglob("grid.db")]
-    )
-
-    if not DB_PATH.exists():
-        raise RuntimeError(
-            f"Deployment bundle downloaded but database was not found. "
-            f"Expected: {DB_PATH}"
-        )
-
-
-CHECK_EVERY_SECONDS = 150
+    deployment.ensure_deployment_data(bundle_url=_secret_bundle_url())
 
 
 def _refresh_loop() -> None:
@@ -88,7 +50,7 @@ def _refresh_loop() -> None:
                 f"{type(exc).__name__}: {exc}"
             )
 
-        time.sleep(CHECK_EVERY_SECONDS)
+        time.sleep(REFRESH_CHECK_SECONDS)
 
 
 @st.cache_resource(show_spinner=False)

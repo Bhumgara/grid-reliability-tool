@@ -1,6 +1,7 @@
-from pathlib import Path
 import json
 import requests
+
+from core.config import NESO_RAW_DIR
 
 
 BASE_URL = "https://api.carbonintensity.org.uk"
@@ -50,7 +51,7 @@ def fetch_demand_update(
     return response.json()
 
 def save_raw_neso(data: dict, filename: str) -> None:
-    path = Path("data/raw/neso")
+    path = NESO_RAW_DIR
     path.mkdir(parents=True, exist_ok=True)
 
     filename = filename if filename.endswith(".json") else f"{filename}.json"
@@ -58,7 +59,6 @@ def save_raw_neso(data: dict, filename: str) -> None:
 
     with open(path / filename, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=2)
-
 
 
 if __name__ == "__main__":
