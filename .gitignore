@@ -236,7 +236,6 @@ data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
-
 # Model artefacts
 artifacts/*
 
@@ -257,6 +256,9 @@ review-stat.txt
 review-files.txt
 review_run.bat
 results.json
+deployment_bundle.zip
+/deploy_bundle
+deployment_bundle_v3.zip
 
 # =========================
 # Flutter / Dart (app/)
