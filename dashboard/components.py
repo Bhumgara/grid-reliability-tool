@@ -532,11 +532,21 @@ def render_generation_section(
     )
 
 
+    try:
+        change_chart = (
+            build_generation_change_dashboard(
+                generation,
+                lookback_hours=4,
+            )
+        )
+    except ValueError as exc:
+        st.info(
+            str(exc)
+        )
+        return
+
     st.altair_chart(
-        build_generation_change_dashboard(
-            generation,
-            lookback_hours=4,
-        ),
+        change_chart,
         width="stretch",
     )
 
