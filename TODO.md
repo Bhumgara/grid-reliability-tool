@@ -115,11 +115,11 @@ the API and worker (Phase 2) can share it.
 
 Needs: 1.1
 
-- [ ] Add `fastapi`, `uvicorn` and `pydantic` to the requirements
-- [ ] Add `backend/api/main.py` with an app factory and `GET /api/health`
-- [ ] Configure CORS from an environment variable, and document it in `.env.example`
-- [ ] Add shared response models (timestamps, `EmptyState` with `state` and `message`)
-- [ ] Add an API test for health using `TestClient`
+- [x] Add `fastapi`, `uvicorn` and `pydantic` to the requirements
+- [x] Add `backend/api/main.py` with an app factory and `GET /api/health`
+- [x] Configure CORS from an environment variable, and document it in `.env.example`
+- [x] Add shared response models (timestamps, `EmptyState` with `state` and `message`)
+- [x] Add an API test for health using `TestClient`
 
 ### 2.2 `feature/api-endpoints`
 
@@ -151,7 +151,7 @@ Needs: 1.6
 Needs: 2.2, 2.3. Lets clients poll cheaply (see Decisions).
 
 - [ ] Include `last_refresh_completed` in `GET /api/status`, so a client can tell whether anything changed
-- [ ] Send an `ETag` on each data endpoint, built from the refresh timestamp, and return `304 Not Modified` when `If-None-Match` matches
+- [ ] Send an `ETag` on each data endpoint, built from the refresh timestamp, and return `304 Not Modified` when `If-None-Match` matches. Add both headers to the CORS config (`allow_headers` and `expose_headers`), or the web build can't use them
 - [ ] Add `Cache-Control` headers that match the refresh interval
 - [ ] Add tests: `304` while the data is unchanged, `200` with a new `ETag` after the refresh timestamp changes
 
