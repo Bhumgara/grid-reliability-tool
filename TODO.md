@@ -82,6 +82,7 @@ instead of breaking the page.
 - [x] Raise the intended `ValueError` (not `KeyError`) in `generation_change_view` when no fuel has values at both snapshots, with a test
 - [x] Show an info message instead of breaking the page when the generation change chart can't be built (`render_generation_section`)
 - [x] Raise `ValueError` (not `KeyError`) in `model_vs_persistence_view` when no complete rows remain, with a test
+- [x] Show an info message instead of breaking the page when the generation doughnut can't be built (`render_generation_section`)
 
 ---
 

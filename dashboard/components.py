@@ -512,24 +512,35 @@ def render_generation_section(
     )
 
     with gen_mix:
-        st.altair_chart(
-            build_generation_doughnut_dashboard(
-                live_generation,
-                minimum_share=0.0
-            ),
-            width="stretch",
-        )
+        try:
+            doughnut = (
+                build_generation_doughnut_dashboard(
+                    live_generation,
+                    minimum_share=0.0
+                )
+            )
+        except ValueError as exc:
+            doughnut = None
+            st.info(
+                str(exc)
+            )
+        else:
+            st.altair_chart(
+                doughnut,
+                width="stretch",
+            )
 
     with interconnector_section:
             render_interconnector_list(
                 interconnectors
             )
 
-    st.caption(
-        "Small positive contributors are grouped into Other. "
-        "Negative interconnector / storage flows are not represented "
-        "as doughnut slices."
-    )
+    if doughnut is not None:
+        st.caption(
+            "Small positive contributors are grouped into Other. "
+            "Negative interconnector / storage flows are not represented "
+            "as doughnut slices."
+        )
 
 
     try:
