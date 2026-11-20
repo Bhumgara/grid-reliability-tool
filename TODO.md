@@ -125,7 +125,7 @@ Needs: 1.1
 
 Needs: 1.2, 1.6, 2.1
 
-- [ ] `GET /api/status` (refresh status)
+- [x] `GET /api/status` (refresh status)
 - [ ] `GET /api/forecast/hero` (forecast, margin percentile, bridge steps)
 - [ ] `GET /api/grid/now` (current margin, demand and generation metrics)
 - [ ] `GET /api/history/margin` and `/api/history/demand` (`?days=`)

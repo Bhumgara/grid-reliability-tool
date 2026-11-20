@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.models import HealthResponse
+from backend.api.routes import status
 
 API_PREFIX = "/api"
 
@@ -59,6 +60,8 @@ def create_app(cors_origins: list[str] | None = None) -> FastAPI:
     def health() -> HealthResponse:
         """Liveness check: the process is up and serving requests."""
         return HealthResponse()
+
+    app.include_router(status.router, prefix=API_PREFIX)
 
     return app
 
