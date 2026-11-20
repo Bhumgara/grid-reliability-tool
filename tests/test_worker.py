@@ -124,3 +124,64 @@ def test_signals_set_the_stop_event(monkeypatch, signum):
     handlers[signum](signum, None)
 
     assert stop.is_set()
+
+
+# --- --once and main() ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [
+        ({"state": "fresh"}, 0),
+        ({"state": "degraded"}, 0),
+        ({"state": "refreshing"}, 0),
+        ({}, 0),
+        ({"state": "failed"}, 1),
+        (None, 1),
+    ],
+)
+def test_exit_code(status, code):
+    assert worker.exit_code(status) == code
+
+
+def test_once_runs_one_check_and_exits(monkeypatch):
+    calls = []
+    monkeypatch.setattr(worker, "run_forever", lambda *a, **k: pytest.fail("looped"))
+
+    code = worker.main(["--once"], refresh=lambda: calls.append(1) or {"state": "fresh"})
+
+    assert code == 0
+    assert calls == [1]
+
+
+@pytest.mark.parametrize("refresh_result", ["raise", "failed"])
+def test_once_exits_1_when_the_check_fails(refresh_result):
+    def refresh():
+        if refresh_result == "raise":
+            raise RuntimeError("API down")
+        return {"state": "failed", "message": "Live refresh failed"}
+
+    assert worker.main(["--once"], refresh=refresh) == 1
+
+
+def test_main_without_once_runs_the_loop(monkeypatch):
+    ran = {}
+
+    def fake_run_forever(stop, refresh):
+        ran["refresh"] = refresh
+
+    monkeypatch.setattr(worker, "run_forever", fake_run_forever)
+    monkeypatch.setattr(worker, "_stop_on_signals", lambda stop: None)
+
+    def refresh():
+        return {}
+
+    assert worker.main([], refresh=refresh) == 0
+    assert ran["refresh"] is refresh
+
+
+def test_unknown_argument_is_rejected():
+    with pytest.raises(SystemExit) as error:
+        worker.main(["--twice"])
+
+    assert error.value.code == 2

@@ -6,14 +6,22 @@ process, so the API (which only reads) can run without the dashboard. Each
 check calls pipelines.refresh.refresh_live_data(), which only fetches data
 that is stale. From the repo root:
 
-    python -m backend.worker
+    python -m backend.worker          # loop until stopped
+    python -m backend.worker --once   # one check, then exit
 
-Stops cleanly on Ctrl+C or SIGTERM (what container hosts send on shutdown),
-finishing any refresh in progress first.
+The loop stops cleanly on Ctrl+C or SIGTERM (what container hosts send on
+shutdown), finishing any refresh in progress first.
+
+``--once`` is for hosts that run the worker on a schedule instead of keeping
+it running (cron, or Cloud Scheduler triggering a Cloud Run job). Its exit
+code tells the scheduler whether the check worked: 0 if it did (including
+"degraded", where cached data remains usable), 1 if it raised or the refresh
+state is "failed".
 """
 
 from __future__ import annotations
 
+import argparse
 import logging
 import signal
 import sys
@@ -86,15 +94,36 @@ def _stop_on_signals(stop: threading.Event) -> None:
     signal.signal(signal.SIGTERM, handle)
 
 
-def main() -> int:
+def exit_code(status: dict | None) -> int:
+    """Exit code for ``--once``: 1 if the check raised or failed, else 0."""
+    if status is None or status.get("state") == "failed":
+        return 1
+    return 0
+
+
+def main(
+    argv: list[str] | None = None,
+    refresh: Callable[[], dict] = _default_refresh,
+) -> int:
+    parser = argparse.ArgumentParser(description="Keep the live grid data up to date.")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="run one refresh check and exit (for cron or scheduled jobs)",
+    )
+    args = parser.parse_args(argv)
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
+    if args.once:
+        return exit_code(refresh_once(refresh))
+
     stop = threading.Event()
     _stop_on_signals(stop)
-    run_forever(stop)
+    run_forever(stop, refresh=refresh)
     return 0
 
 
