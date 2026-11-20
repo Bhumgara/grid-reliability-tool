@@ -2,12 +2,49 @@
 
 from pathlib import Path
 
+import pytest
+
 
 def test_core_package_imports():
     import core.config
     import core.db  # noqa: F401
 
-    assert core.config.DB_PATH == Path("data/grid.db")
+    assert core.config.DB_PATH == core.config.PROJECT_ROOT / "data" / "grid.db"
+
+
+def test_project_root_is_the_repo_root():
+    from core.config import PROJECT_ROOT
+
+    assert (PROJECT_ROOT / "core" / "config.py").is_file()
+    assert (PROJECT_ROOT / "sql" / "schema.sql").is_file()
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "DB_PATH",
+        "METRICS_PATH",
+        "FORECAST_PATH",
+        "STATUS_PATH",
+        "VALIDATION_PATH",
+        "TEST_PATH",
+    ],
+)
+def test_config_paths_are_absolute_inside_the_repo(name):
+    import core.config
+
+    path = getattr(core.config, name)
+
+    assert path.is_absolute()
+    assert path.is_relative_to(core.config.PROJECT_ROOT)
+
+
+def test_dashboard_bootstrap_shares_config_paths():
+    import core.config
+    from dashboard import bootstrap
+
+    assert bootstrap.DB_PATH is core.config.DB_PATH
+    assert bootstrap.PROJECT_ROOT is core.config.PROJECT_ROOT
 
 
 def test_schema_file_present():

@@ -13,6 +13,7 @@ import time
 
 import streamlit as st
 
+from core.config import DB_PATH, PROJECT_ROOT
 from pipelines.refresh import refresh_live_data
 
 from pathlib import Path
@@ -20,12 +21,6 @@ from zipfile import ZipFile
 import tempfile
 
 import requests
-
-
-# dashboard/bootstrap.py -> dashboard -> repo root
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-DB_PATH = PROJECT_ROOT / "data" / "grid.db"
 
 
 def ensure_deployment_data() -> None:
