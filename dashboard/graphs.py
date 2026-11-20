@@ -26,6 +26,7 @@ from core.views.generation import (
 from core.views.generation import (
     latest_generation_snapshot as _latest_generation_snapshot,
 )
+from core.views.interconnectors import interconnector_view
 from dashboard.styles import (
     DEMAND_PROFILE_COLOURS, 
     FUEL_COLOURS, 
@@ -45,31 +46,6 @@ FUEL_LABELS = {
     "PS": "Pumped storage",
 
     "OTHER": "Other",
-}
-
-INTERCONNECTOR_GROUPS = {
-    "Belgium": [
-        "INTNEM",
-    ],
-    "Denmark": [
-        "INTVKL",
-    ],
-    "France": [
-        "INTFR",
-        "INTIFA2",
-        "INTELEC",
-    ],
-    "Ireland": [
-        "INTIRL",
-        "INTEW",
-        "INTGRNL",
-    ],
-    "Netherlands": [
-        "INTNED",
-    ],
-    "Norway": [
-        "INTNSL",
-    ],
 }
 
 
@@ -3037,65 +3013,26 @@ def build_generation_doughnut_dashboard(
 def render_interconnector_list(
     interconnectors: pd.DataFrame,
 ) -> None:
-    if interconnectors.empty:
+    view = interconnector_view(interconnectors)
+
+    if view.flows.empty:
         st.caption(
             "No current interconnector data."
         )
         return
 
-    data = interconnectors.copy()
+    arrows = {
+        "Import": "→",
+        "Export": "←",
+        "Idle": "—",
+    }
 
-    if "flow_gw" not in data.columns:
-        if "generation_mw" not in data.columns:
-            raise ValueError(
-                "Interconnector data requires "
-                "'flow_gw' or 'generation_mw'."
-            )
+    rows = [
+        {**row, "arrow": arrows[row["direction"]]}
+        for row in view.flows.to_dict("records")
+    ]
 
-        data["flow_gw"] = (
-            data["generation_mw"]
-            / 1000
-        )
-
-    flows = (
-        data
-        .set_index("fuel_type")["flow_gw"]
-        .to_dict()
-    )
-
-    rows = []
-
-    for country, codes in (
-        INTERCONNECTOR_GROUPS.items()
-    ):
-        flow_gw = sum(
-            flows.get(code, 0.0)
-            for code in codes
-        )
-
-        if flow_gw > 0.01:
-            direction = "Import"
-            arrow = "→"
-        elif flow_gw < -0.01:
-            direction = "Export"
-            arrow = "←"
-        else:
-            direction = "Idle"
-            arrow = "—"
-
-        rows.append(
-            {
-                "country": country,
-                "flow_gw": flow_gw,
-                "direction": direction,
-                "arrow": arrow,
-            }
-        )
-
-    net_flow = sum(
-        row["flow_gw"]
-        for row in rows
-    )
+    net_flow = view.net_flow_gw
 
     if net_flow > 0:
         net_label = (

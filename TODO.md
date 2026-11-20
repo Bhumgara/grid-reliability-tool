@@ -61,7 +61,7 @@ Needs: 1.1. Pull the pandas data preparation out of each live chart builder in
 - [x] Typical-day profile: current, latest full day, median, IQR (`build_typical_day_demand_dashboard`)
 - [x] Live generation snapshot and doughnut shares (`_latest_generation_snapshot`, `build_generation_doughnut_dashboard`)
 - [x] Generation change (`build_generation_change_dashboard`)
-- [ ] Interconnector grouping (`INTERCONNECTOR_GROUPS`, `render_interconnector_list`)
+- [x] Interconnector grouping (`INTERCONNECTOR_GROUPS`, `render_interconnector_list`)
 - [ ] Validation residuals and model vs persistence (`build_validation_graphs`, `build_model_vs_persistence_vertical`)
 - [ ] Add tests for each view function, and check that the Streamlit charts look unchanged
 
@@ -72,6 +72,13 @@ Needs: 0.1. Can run in parallel with 1.1 and 1.2.
 - [ ] Export `PALETTE`, `FUEL_COLOURS`, `MODEL_COLOURS` and `DEMAND_PROFILE_COLOURS` to `tokens/tokens.json`
 - [ ] Make `dashboard/styles.py` load its colours from `tokens.json`
 - [ ] Add dark-mode values for each token
+
+### 1.4 `fix/generation-change-errors`
+
+Needs: 1.2. Behaviour fixes found while extracting the generation change view.
+
+- [ ] Raise the intended `ValueError` (not `KeyError`) in `generation_change_view` when no fuel has values at both snapshots, with a test
+- [ ] Show an info message instead of breaking the page when the generation change chart can't be built (`render_generation_section`)
 
 ---
 
