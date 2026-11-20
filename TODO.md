@@ -71,7 +71,7 @@ Needs: 0.1. Can run in parallel with 1.1 and 1.2.
 
 - [x] Export `PALETTE`, `FUEL_COLOURS`, `MODEL_COLOURS` and `DEMAND_PROFILE_COLOURS` to `tokens/tokens.json`
 - [x] Make `dashboard/styles.py` load its colours from `tokens.json`
-- [ ] Add dark-mode values for each token
+- [x] Add dark-mode values for each token
 
 ### 1.4 `fix/view-error-handling`
 
