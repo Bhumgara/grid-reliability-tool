@@ -1,24 +1,15 @@
 """
 Streamlit data loaders for the dashboard.
 
-Database queries live in core.queries; this module only adds Streamlit
+Loading logic lives in core.queries; this module only adds Streamlit
 caching on top so a completed background refresh shows up within the TTL.
 """
-
-import json
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
 from core import queries
 
-
-METRICS_PATH = Path("artifacts/metrics.json")
-FORECAST_PATH = Path("data/processed/latest_forecast.json")
-STATUS_PATH = Path("data/processed/refresh_status.json")
-VALIDATION_PATH = Path("data/processed/validation_predictions.csv")
-TEST_PATH = Path("data/processed/test_predictions.csv")
 
 LIVE_CACHE_TTL = 45
 
@@ -55,60 +46,19 @@ def load_margin_history() -> pd.Series:
 
 @st.cache_data
 def load_model_metrics() -> dict:
-    if not METRICS_PATH.exists():
-        return {}
-
-    with METRICS_PATH.open(encoding="utf-8") as file:
-        return json.load(file)
+    return queries.load_model_metrics()
 
 
 @st.cache_data(ttl=15)
 def load_latest_forecast() -> dict | None:
-    if not FORECAST_PATH.exists():
-        return None
-
-    try:
-        with FORECAST_PATH.open(encoding="utf-8") as file:
-            return json.load(file)
-    except (
-        OSError,
-        json.JSONDecodeError,
-    ):
-        return None
+    return queries.load_latest_forecast()
 
 
 @st.cache_data(ttl=5)
 def load_refresh_status() -> dict:
-    if not STATUS_PATH.exists():
-        return {}
-
-    try:
-        with STATUS_PATH.open(encoding="utf-8") as file:
-            return json.load(file)
-    except (
-        OSError,
-        json.JSONDecodeError,
-    ):
-        return {}
+    return queries.load_refresh_status()
 
 
 @st.cache_data
 def load_validation_predictions() -> pd.DataFrame:
-    path = (
-        VALIDATION_PATH
-        if VALIDATION_PATH.exists()
-        else TEST_PATH
-    )
-
-    if not path.exists():
-        return pd.DataFrame()
-
-    df = pd.read_csv(path)
-
-    if "target_time_utc" in df.columns:
-        df["target_time_utc"] = pd.to_datetime(
-            df["target_time_utc"],
-            utc=True,
-        )
-
-    return df
+    return queries.load_validation_predictions()
