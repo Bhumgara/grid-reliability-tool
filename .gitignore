@@ -257,3 +257,46 @@ review-stat.txt
 review-files.txt
 review_run.bat
 results.json
+
+# =========================
+# Flutter / Dart (app/)
+# =========================
+# `flutter create` also writes its own app/.gitignore; these rules are the
+# safety net at the repo root.
+
+# Build output and tool caches
+app/build/
+.dart_tool/
+.pub-cache/
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+*.iml
+.idea/
+
+# Android
+app/android/.gradle/
+app/android/local.properties
+app/android/key.properties
+app/android/app/debug/
+app/android/app/profile/
+app/android/app/release/
+*.jks
+*.keystore
+
+# iOS
+app/ios/Pods/
+app/ios/.symlinks/
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/flutter_export_environment.sh
+app/ios/Runner/GeneratedPluginRegistrant.*
+**/xcuserdata/
+
+# Windows / Linux generated plugin code
+app/windows/flutter/ephemeral/
+app/linux/flutter/ephemeral/
+
+# The Python "*.manifest" rule above would hide this Flutter source file
+!app/windows/runner/runner.exe.manifest
