@@ -44,7 +44,7 @@ Settle these before the branch that depends on them.
 
 Needs: 0.1
 
-- [ ] Add `core/queries.py` containing the SQL loaders from `dashboard/data.py`, with no Streamlit imports
+- [x] Add `core/queries.py` containing the SQL loaders from `dashboard/data.py`, with no Streamlit imports
 - [ ] Make `dashboard/data.py` thin `st.cache_data` wrappers around `core/queries.py`
 - [ ] Move the file-based loaders (metrics, forecast, refresh status, validation CSV) into `core/queries.py`
 - [ ] Move `calculate_margin_percentile` and `describe_margin_percentile` from `components.py` into `core/`
