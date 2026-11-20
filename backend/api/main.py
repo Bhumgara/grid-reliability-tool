@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.api.models import EmptyState, HealthResponse
-from backend.api.routes import forecast, grid, history, status
+from backend.api.routes import demand, forecast, grid, history, status
 from core.queries import DatabaseUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ def create_app(cors_origins: list[str] | None = None) -> FastAPI:
         """Liveness check: the process is up and serving requests."""
         return HealthResponse()
 
-    for module in (status, forecast, grid, history):
+    for module in (status, forecast, grid, history, demand):
         app.include_router(module.router, prefix=API_PREFIX)
 
     return app

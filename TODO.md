@@ -130,7 +130,7 @@ Needs: 1.2, 1.6, 2.1
 - [x] Open the database read-only in `core/queries.py`, so a missing `grid.db` raises an error instead of creating an empty file (which would stop `ensure_deployment_data()` downloading the real one); the API returns `503` with an `unavailable` `EmptyState`
 - [x] `GET /api/grid/now` (current margin, demand and generation metrics)
 - [x] `GET /api/history/margin` and `/api/history/demand` (`?days=`)
-- [ ] `GET /api/demand/typical-day`
+- [x] `GET /api/demand/typical-day`
 - [ ] `GET /api/generation/live`, `/api/generation/change` and `/api/interconnectors/live`
 - [ ] `GET /api/model/metrics` and `/api/model/validation`
 - [ ] Add a server-side TTL cache matching the current 45 s and 15 s TTLs
