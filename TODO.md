@@ -1,8 +1,9 @@
 # TODO: Flutter front-end migration
 
-Move the dashboard from Streamlit to a FastAPI backend and a Flutter client
-(Android, iOS, Windows, Linux, web), with JS/CSS used only for optional
-embedded visuals.
+Move the dashboard from Streamlit to a FastAPI backend and a Flutter client.
+One Flutter codebase builds every platform (Android, iOS, Windows, macOS,
+Linux, web), with no embedded JS/CSS. The backend is containerised and split
+into swappable parts so it can move between hosts.
 
 ## How to use this list
 
@@ -11,18 +12,20 @@ embedded visuals.
 - Each checkbox is **one commit**. Commits are small and leave the app working.
 - **Needs:** lists the branches that must be merged first. Branches with no
   overlapping dependencies can run in parallel.
-- Streamlit keeps working until Phase 6, so every branch can be checked against
+- Streamlit keeps working until Phase 8, so every branch can be checked against
   the current dashboard.
+
+## Decisions
+
+- [x] **Chart library:** fl_chart. MIT is permissive: the app can be commercial or closed source, provided the licence notices ship with it (Flutter's licence page collects them). Every dependency must use a permissive licence (MIT, BSD, Apache-2.0); no GPL or AGPL. Checked in 7.2.
+- [x] **Live updates:** cheap polling. The client polls `GET /api/status`, and fetches data only when the last refresh time is newer than its own copy. Data endpoints send `ETag` headers, so unchanged data returns `304 Not Modified`. Built in 2.4 and 4.2.
+- [x] **Hosting:** local for development, then Google Cloud (Compute Engine VMs, Cloud Run, BigQuery or similar services), then on-premise. The backend is containerised from Phase 2 (2.5). API, worker and storage are separate, swappable parts (2.3, 2.6). The device keeps the last data it fetched, so the app works offline (4.1).
+- [x] **Platforms and embedded JS/CSS:** one Flutter codebase builds the apps and the website (Chrome and Firefox), with small per-platform adapters only where needed. There is no embedded JS/CSS, so no platform needs a web view. Showpiece visuals are drawn in Flutter (7.1).
+- [x] **Swiper:** retire `dashboard/swiper.py` in 8.1.
 
 ## Open decisions
 
-Settle these before the branch that depends on them.
-
-- [ ] Chart library: fl_chart (MIT) by default, or Syncfusion (check licence). Needed by Phase 5.
-- [ ] Live updates: server-sent events, or simple polling at first. Needed by 2.4.
-- [ ] Backend hosting target (VPS, container platform, etc.). The current Streamlit app reads `st.secrets`, which suggests Streamlit Community Cloud; that host can't run the FastAPI service or a separate worker. Needed by 2.3 and 7.2.
-- [ ] Linux web view: check current package support, or go native-only on Linux. Needed by 7.1.
-- [ ] Keep `dashboard/swiper.py` as an internal Streamlit tool, or retire it. Needed by 8.1.
+- [ ] First storage backend after SQLite: Postgres (e.g. Cloud SQL) for the live data, BigQuery for history and analytics, or both. Needed when the backend outgrows a single VM with a disk; 2.6 adds the seam, not the switch.
 
 ---
 
@@ -137,17 +140,41 @@ Needs: 1.2, 1.6, 2.1
 Needs: 1.6
 
 - [ ] Add `backend/worker.py`, a standalone loop that calls `refresh_live_data()` on the shared refresh interval from `core/config.py`
+- [ ] Add a `--once` mode that refreshes once and exits, so a scheduler (cron, Cloud Scheduler with a Cloud Run job) can run it instead of the loop
 - [ ] Have the worker call `ensure_deployment_data()` before its first refresh
 - [ ] Have the worker record a `last_refresh_completed` timestamp the API can read
 - [ ] Put the Streamlit thread in `dashboard/bootstrap.py` behind an environment flag, so only one refresher runs
 - [ ] Document running the API and the worker in `README.md`
 
-### 2.4 `feature/live-updates`
+### 2.4 `feature/change-detection`
 
-Needs: 2.2, 2.3
+Needs: 2.2, 2.3. Lets clients poll cheaply (see Decisions).
 
-- [ ] Add a `GET /api/events` stream (SSE) that sends a `data_refreshed` event when the worker finishes
-- [ ] Add a test that the event fires after the refresh timestamp changes
+- [ ] Include `last_refresh_completed` in `GET /api/status`, so a client can tell whether anything changed
+- [ ] Send an `ETag` on each data endpoint, built from the refresh timestamp, and return `304 Not Modified` when `If-None-Match` matches
+- [ ] Add `Cache-Control` headers that match the refresh interval
+- [ ] Add tests: `304` while the data is unchanged, `200` with a new `ETag` after the refresh timestamp changes
+
+### 2.5 `chore/containerise`
+
+Needs: 2.1, 2.3. One image runs the API or the worker, so every host (local,
+Compute Engine, Cloud Run, on-premise) runs the same thing.
+
+- [ ] Make the data folder configurable with a `GRID_DATA_DIR` environment variable in `core/config.py` (default `<repo>/data`), with a test
+- [ ] Add a `Dockerfile` and `.dockerignore`; the API and the worker are separate commands on the same image
+- [ ] Add a `compose.yaml` for local development: API, worker and a shared data volume
+- [ ] Document building and running the containers in `README.md`
+
+### 2.6 `refactor/storage-backends`
+
+Needs: 2.2, 2.3. Puts storage behind interfaces so SQLite can later be swapped
+for Postgres, BigQuery or object storage without touching the API or worker.
+
+- [ ] Add a `GridStore` interface in `core/storage/` for the reads in `core/queries.py` and the writes in `pipelines/`
+- [ ] Add the SQLite implementation, wrapping the current code, and route `core/queries.py` and `pipelines/` through it
+- [ ] Put the JSON and CSV outputs (forecast, refresh status, validation) behind a file-store interface: a local folder now, object storage (e.g. Cloud Storage) later
+- [ ] Choose the backends with environment variables (default SQLite and the local folder)
+- [ ] Add contract tests that every backend must pass, run against SQLite
 
 ---
 
@@ -157,7 +184,7 @@ Needs: 2.2, 2.3
 
 Needs: 0.1
 
-- [ ] Run `flutter create app` for android, ios, web, windows and linux
+- [ ] Run `flutter create app` for android, ios, web, windows, macos and linux
 - [ ] Add lint rules (`flutter_lints` or `very_good_analysis`) and an `analysis_options.yaml`
 - [ ] Set up the folder layout: `lib/{theme,api,state,features,widgets}/`
 - [ ] Add placeholder pages: Now, Forecast, Generation, Model
@@ -192,15 +219,17 @@ Needs: 2.2, 3.1
 - [ ] Generate (or write) Dart models from `openapi.json`
 - [ ] Add an HTTP client with error handling, timeouts and empty-state mapping
 - [ ] Add Riverpod providers, one per endpoint
+- [ ] Store the last successful response for each endpoint on the device, using storage that works on every platform including web
+- [ ] Show the stored data with its "last updated" time when the device is offline or the API fails
 - [ ] Add pull-to-refresh and a manual refresh action
 
 ### 4.2 `feature/flutter-live-updates`
 
 Needs: 2.4, 4.1
 
-- [ ] Listen to `/api/events` and invalidate the matching providers
-- [ ] Fall back to polling every 60 s when SSE is unavailable
-- [ ] Pause updates while the app is in the background (app lifecycle)
+- [ ] Poll `GET /api/status` on a set interval, and refetch the data only when `last_refresh_completed` is newer than the stored copy
+- [ ] Send `If-None-Match` with the stored `ETag`, and keep the stored copy on `304`
+- [ ] Pause polling while the app is in the background, and check once when it resumes (app lifecycle)
 
 ### 4.3 `feature/flutter-shared-widgets`
 
@@ -270,30 +299,31 @@ Needs: Phase 5
 
 ---
 
-## Phase 7: JS/CSS embeds and packaging
+## Phase 7: Showpiece visuals and packaging
 
-### 7.1 `feature/embedded-visuals`
+### 7.1 `feature/grid-flow-visual`
 
-Needs: Phase 5
+Needs: Phase 5. Drawn in Flutter (`CustomPainter` and animations), so it runs
+the same on every platform with no web view.
 
-- [ ] `EmbeddedVisual` widget with conditional imports (`HtmlElementView` on web)
-- [ ] Web view implementation for Android, iOS and Windows
-- [ ] Native Flutter fallback for Linux and load failures
-- [ ] First showpiece: interconnector or grid-flow map (JS/CSS bundled as an asset)
-- [ ] CSS loading screen in `app/web/index.html`
+- [ ] Grid-flow map: generation, demand and interconnector flows, using the live endpoints
+- [ ] Animate flow direction and size from the latest data
+- [ ] Simplified layout for compact screens, and a reduced-motion option
 
 ### 7.2 `chore/packaging`
 
-Needs: Phase 5
+Needs: Phase 5, 2.5
 
 - [ ] App name, icons and splash screens (`flutter_launcher_icons`, `flutter_native_splash`)
-- [ ] Backend `Dockerfile` for the API and worker, plus a deployment config
-- [ ] Web build and static hosting config
+- [ ] Deploy the backend container to a Google Cloud Compute Engine VM with a persistent disk for the data
+- [ ] Web build, static hosting config, and a plain loading screen in `app/web/index.html`
 - [ ] Android release build (signing, Play Store metadata)
 - [ ] iOS release build (bundle ID, signing, App Store metadata)
 - [ ] Windows MSIX packaging
+- [ ] macOS release build (signing, notarisation)
 - [ ] Linux packaging (Flatpak or AppImage)
-- [ ] CI workflow: Python tests, `flutter analyze`, `flutter test`, platform builds
+- [ ] Dependency licence check (Python and Dart): permissive licences only, notices included
+- [ ] CI workflow: Python tests, `flutter analyze`, `flutter test`, web tests in Chrome and Firefox, platform builds
 
 ---
 
@@ -304,7 +334,7 @@ Needs: Phase 5
 Needs: 5.6 parity review signed off
 
 - [ ] Remove `app.py`, `dashboard/components.py` and `dashboard/bootstrap.py`
-- [ ] Remove the live Altair builders from `dashboard/graphs.py` (keep the swiper builders if swiper stays)
-- [ ] Remove the unused builders (`build_concept_graphs`, `build_confidence_fan_graph`, `_fuel_scale`)
-- [ ] Remove `streamlit` and `altair` from the requirements, if swiper is retired
+- [ ] Remove `dashboard/swiper.py`, `SWIPER_RESULTS_PATH` in `core/config.py`, and the `results.json` rules in `.gitignore`
+- [ ] Remove the rest of `dashboard/` (`graphs.py` with its live, swiper and unused builders; `data.py`; `styles.py`). `tokens/tokens.json` stays for Flutter
+- [ ] Remove `streamlit` and `altair` from the requirements
 - [ ] Update `README.md`, `docs/` and `CHANGELOG.md` for the new architecture
