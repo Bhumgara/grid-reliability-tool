@@ -131,7 +131,7 @@ Needs: 1.2, 1.6, 2.1
 - [x] `GET /api/grid/now` (current margin, demand and generation metrics)
 - [x] `GET /api/history/margin` and `/api/history/demand` (`?days=`)
 - [x] `GET /api/demand/typical-day`
-- [ ] `GET /api/generation/live`, `/api/generation/change` and `/api/interconnectors/live`
+- [x] `GET /api/generation/live`, `/api/generation/change` and `/api/interconnectors/live`
 - [ ] `GET /api/model/metrics` and `/api/model/validation`
 - [ ] Add a server-side TTL cache matching the current 45 s and 15 s TTLs
 - [ ] Add a script that exports the OpenAPI schema to `backend/openapi.json`
