@@ -89,3 +89,24 @@ def test_model_vs_persistence_missing_columns(predictions):
 
     with pytest.raises(ValueError, match="requires columns"):
         model_vs_persistence_view(predictions, baseline_col="nope")
+
+
+@pytest.mark.parametrize(
+    "column",
+    ["target_drm_mw", "predicted_drm_mw", "baseline_drm_yesterday_mw"],
+)
+def test_model_vs_persistence_needs_a_complete_row(predictions, column):
+    incomplete = predictions.assign(**{column: float("nan")})
+
+    with pytest.raises(ValueError, match="at least one prediction"):
+        model_vs_persistence_view(incomplete)
+
+
+def test_model_vs_persistence_uses_only_complete_rows(predictions):
+    partly_missing = predictions.copy()
+    partly_missing.loc[1:, "predicted_drm_mw"] = float("nan")
+
+    view = model_vs_persistence_view(partly_missing)
+
+    assert set(view.compare["segment"]) == {"Overall", "Lowest 10% DRM"}
+    assert view.compare["mae_gw"].tolist() == pytest.approx([0.3, 0.1, 0.3, 0.1])
