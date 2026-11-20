@@ -63,7 +63,7 @@ Needs: 1.1. Pull the pandas data preparation out of each live chart builder in
 - [x] Generation change (`build_generation_change_dashboard`)
 - [x] Interconnector grouping (`INTERCONNECTOR_GROUPS`, `render_interconnector_list`)
 - [x] Validation residuals and model vs persistence (`build_validation_graphs`, `build_model_vs_persistence_vertical`)
-- [ ] Add tests for each view function, and check that the Streamlit charts look unchanged
+- [x] Add tests for each view function, and check that the Streamlit charts look unchanged
 
 ### 1.3 `chore/design-tokens`
 
@@ -73,12 +73,15 @@ Needs: 0.1. Can run in parallel with 1.1 and 1.2.
 - [ ] Make `dashboard/styles.py` load its colours from `tokens.json`
 - [ ] Add dark-mode values for each token
 
-### 1.4 `fix/generation-change-errors`
+### 1.4 `fix/view-error-handling`
 
-Needs: 1.2. Behaviour fixes found while extracting the generation change view.
+Needs: 1.2. Behaviour fixes found while extracting the views. Each view should
+raise `ValueError` for unusable data, and the dashboard should show a message
+instead of breaking the page.
 
 - [ ] Raise the intended `ValueError` (not `KeyError`) in `generation_change_view` when no fuel has values at both snapshots, with a test
 - [ ] Show an info message instead of breaking the page when the generation change chart can't be built (`render_generation_section`)
+- [ ] Raise `ValueError` (not `KeyError`) in `model_vs_persistence_view` when no complete rows remain, with a test
 
 ---
 
