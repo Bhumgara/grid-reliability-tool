@@ -119,7 +119,7 @@ Needs: 1.1
 - [x] Add `backend/api/main.py` with an app factory and `GET /api/health`
 - [x] Configure CORS from an environment variable, and document it in `.env.example`
 - [x] Add shared response models (timestamps, `EmptyState` with `state` and `message`)
-- [ ] Add an API test for health using `TestClient`
+- [x] Add an API test for health using `TestClient`
 
 ### 2.2 `feature/api-endpoints`
 
