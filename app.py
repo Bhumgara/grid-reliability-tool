@@ -38,8 +38,9 @@ st.set_page_config(
 apply_styles()
 
 # Starts once per Streamlit server process. The worker performs the first
-# freshness check immediately, then wakes every 15 minutes. Normal Streamlit
-# reruns never call the external APIs directly.
+# freshness check immediately, then checks again every CHECK_EVERY_SECONDS
+# (150 seconds, set in dashboard/bootstrap.py); each check only fetches data
+# that is stale. Normal Streamlit reruns never call the external APIs directly.
 start_background_worker()
 
 st.title("UK Energy Reliability Tool")
