@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -8,8 +6,10 @@ from sklearn.metrics import (
     mean_squared_error,
 )
 
+from core.config import PROCESSED_DIR
 
-OUTPUT_DIR = Path("data/processed")
+
+OUTPUT_DIR = PROCESSED_DIR
 
 
 def evaluate_predictions(

@@ -1,9 +1,9 @@
 import sqlite3
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from core import config
 from core.config import DB_PATH
 
 from model.features import (
@@ -20,8 +20,8 @@ from pipelines.helper import (
 )
 
 
-TARGET_SQL_PATH = Path("sql/datasets/build_model_dataset.sql")
-OUTPUT_PATH = Path("data/processed/model_dataset.csv")
+TARGET_SQL_PATH = config.MODEL_DATASET_SQL_PATH
+OUTPUT_PATH = config.MODEL_DATASET_PATH
 
 FUEL_TYPES = [
     "WIND",
@@ -440,7 +440,6 @@ def build_model_dataset() -> pd.DataFrame:
     )
 
     return df
-
 
 
 if __name__ == "__main__":

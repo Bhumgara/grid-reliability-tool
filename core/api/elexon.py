@@ -1,6 +1,7 @@
-from pathlib import Path
 import json
 import requests
+
+from core.config import ELEXON_RAW_DIR
 
 
 BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1"
@@ -138,7 +139,7 @@ def fetch_fuelinst(
 
 
 def save_raw(data: dict, filename: str) -> None:
-    path = Path("data/raw/elexon")
+    path = ELEXON_RAW_DIR
     path.mkdir(parents=True, exist_ok=True)
 
     filename = filename if filename.endswith(".json") else f"{filename}.json"

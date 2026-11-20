@@ -22,12 +22,12 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Callable
 
 import pandas as pd
 import streamlit as st
 
+from core import config
 from dashboard.data import (
     load_latest_forecast,
     load_margin_history,
@@ -54,15 +54,11 @@ from dashboard.graphs import (
 )
 
 
-RESULTS_PATH = Path("results.json")
+RESULTS_PATH = config.SWIPER_RESULTS_PATH
 
-VALIDATION_PATH = Path(
-    "data/processed/validation_predictions.csv"
-)
+VALIDATION_PATH = config.VALIDATION_PATH
 
-TEST_PATH = Path(
-    "data/processed/test_predictions.csv"
-)
+TEST_PATH = config.TEST_PATH
 
 
 # ============================================================

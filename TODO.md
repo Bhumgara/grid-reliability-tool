@@ -101,7 +101,7 @@ the API and worker (Phase 2) can share it.
 
 - [x] Make the `core/config.py` paths absolute from the repo root, use them in `dashboard/bootstrap.py`, and update the smoke test for `DB_PATH`
 - [x] Move `ensure_deployment_data()` into `core/`, taking the bundle URL as a parameter or from `DEPLOYMENT_BUNDLE_URL`; `bootstrap.py` passes the `st.secrets` value, and the debug prints become logging. Test it with a local zip (no network)
-- [ ] Point the hard-coded paths in `pipelines/`, `model/`, `core/api/`, `core/db.py` and `dashboard/swiper.py` at `core/config.py`
+- [x] Point the hard-coded paths in `pipelines/`, `model/`, `core/api/`, `core/db.py` and `dashboard/swiper.py` at `core/config.py`
 - [ ] Add one shared refresh-interval constant (currently 150 seconds) in `core/config.py`, used by `bootstrap.py`
 
 ---

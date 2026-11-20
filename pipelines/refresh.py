@@ -23,6 +23,7 @@ from typing import Callable
 
 import pandas as pd
 
+from core import config
 from core.config import DB_PATH
 from pipelines.ingest import (
     backfill_fuelhh,
@@ -35,8 +36,8 @@ from pipelines.ingest import (
 from pipelines.predict import run_prediction
 
 
-STATUS_PATH = Path("data/processed/refresh_status.json")
-FORECAST_PATH = Path("data/processed/latest_forecast.json")
+STATUS_PATH = config.STATUS_PATH
+FORECAST_PATH = config.FORECAST_PATH
 
 STALE_AFTER = pd.Timedelta(minutes=45)
 OVERLAP = pd.Timedelta(hours=2)

@@ -1,9 +1,9 @@
 import json
-from pathlib import Path
 
 import joblib
 import pandas as pd
 
+from core.config import ARTIFACTS_DIR, PROCESSED_DIR
 from model.evaluate import evaluate_predictions
 from model.train import (
     BASELINE_COLUMN,
@@ -16,8 +16,8 @@ from model.train import (
 )
 
 
-ARTIFACT_DIR = Path("artifacts")
-OUTPUT_DIR = Path("data/processed")
+ARTIFACT_DIR = ARTIFACTS_DIR
+OUTPUT_DIR = PROCESSED_DIR
 
 
 def build_final_split(
@@ -263,17 +263,17 @@ def main() -> None:
     print()
     print(
         "Saved model to "
-        "artifacts/ridge_drm_24h.joblib"
+        f"{ARTIFACT_DIR / 'ridge_drm_24h.joblib'}"
     )
 
     print(
         "Saved metrics to "
-        "artifacts/metrics.json"
+        f"{ARTIFACT_DIR / 'metrics.json'}"
     )
 
     print(
         "Saved test predictions to "
-        "data/processed/test_predictions.csv"
+        f"{OUTPUT_DIR / 'test_predictions.csv'}"
     )
 
 

@@ -1,7 +1,6 @@
 import sqlite3
-from pathlib import Path
 
-from core.config import DB_PATH
+from core.config import DB_PATH, INGESTION_SQL_DIR, SCHEMA_PATH
 
 
 def get_connection():
@@ -10,15 +9,15 @@ def get_connection():
 
 
 def initialise_database():
-    schema = Path("sql/schema.sql").read_text(encoding="utf-8")
+    schema = SCHEMA_PATH.read_text(encoding="utf-8")
 
     with get_connection() as conn:
         conn.executescript(schema)
 
 
 def upsert_margin_lolpdrm_rows(rows):
-    query = Path(
-        "sql/ingestion/upsert_elexon_margin_lolpdrm.sql"
+    query = (
+        INGESTION_SQL_DIR / "upsert_elexon_margin_lolpdrm.sql"
     ).read_text(encoding="utf-8")
 
     values = [
@@ -40,8 +39,8 @@ def upsert_margin_lolpdrm_rows(rows):
 
 
 def upsert_demand_indo_rows(rows):
-    query = Path(
-        "sql/ingestion/upsert_elexon_demand_indo.sql"
+    query = (
+        INGESTION_SQL_DIR / "upsert_elexon_demand_indo.sql"
     ).read_text(encoding="utf-8")
 
     values = [
@@ -60,8 +59,8 @@ def upsert_demand_indo_rows(rows):
         conn.executemany(query, values)
 
 def upsert_generation_fuelhh_rows(rows):
-    query = Path(
-        "sql/ingestion/upsert_elexon_generation_fuelhh.sql"
+    query = (
+        INGESTION_SQL_DIR / "upsert_elexon_generation_fuelhh.sql"
     ).read_text(encoding="utf-8")
 
     values = [
@@ -84,9 +83,8 @@ def upsert_generation_fuelhh_rows(rows):
 def upsert_generation_fuelinst_rows(
     rows,
 ):
-    query = Path(
-        "sql/ingestion/"
-        "upsert_elexon_generation_fuelinst.sql"
+    query = (
+        INGESTION_SQL_DIR / "upsert_elexon_generation_fuelinst.sql"
     ).read_text(
         encoding="utf-8"
     )
@@ -112,8 +110,8 @@ def upsert_generation_fuelinst_rows(
 
 
 def upsert_neso_generation_mix_rows(rows):
-    query = Path(
-        "sql/ingestion/upsert_neso_generation_mix.sql"
+    query = (
+        INGESTION_SQL_DIR / "upsert_neso_generation_mix.sql"
     ).read_text(encoding="utf-8")
 
     values = [
@@ -141,9 +139,8 @@ def upsert_neso_generation_mix_rows(rows):
 def upsert_neso_demand_update_rows(
     rows,
 ):
-    query = Path(
-        "sql/ingestion/"
-        "upsert_neso_demand_update.sql"
+    query = (
+        INGESTION_SQL_DIR / "upsert_neso_demand_update.sql"
     ).read_text(
         encoding="utf-8"
     )
