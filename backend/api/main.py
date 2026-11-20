@@ -18,6 +18,7 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.api.loaders import Loaders
@@ -34,6 +35,12 @@ API_PREFIX = "/api"
 # cross-origin access. Only the web build needs this; the native apps don't
 # send an Origin header.
 CORS_ORIGINS_ENV = "GRID_CORS_ORIGINS"
+
+# Responses smaller than this (bytes) aren't worth compressing.
+GZIP_MINIMUM_SIZE = 1000
+# Level 6 gives nearly the same size as the default 9 on this API's JSON in
+# about half the time.
+GZIP_LEVEL = 6
 
 DATABASE_UNAVAILABLE_MESSAGE = "Grid data is not available yet. Try again shortly."
 
@@ -79,6 +86,14 @@ def create_app(
             allow_origins=cors_origins,
             allow_methods=["GET"],
         )
+
+    # Compress large responses (e.g. model validation points) for clients
+    # that send Accept-Encoding: gzip, which browsers and Dart's http do.
+    app.add_middleware(
+        GZipMiddleware,
+        minimum_size=GZIP_MINIMUM_SIZE,
+        compresslevel=GZIP_LEVEL,
+    )
 
     @app.get(f"{API_PREFIX}/health", response_model=HealthResponse)
     def health() -> HealthResponse:

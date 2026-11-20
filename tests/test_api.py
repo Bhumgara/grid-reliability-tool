@@ -121,3 +121,49 @@ def test_missing_database_returns_503_empty_state(tmp_path, monkeypatch):
     assert response.headers["access-control-allow-origin"] == WEB_ORIGIN
     # The request did not create an empty database.
     assert not (tmp_path / "grid.db").exists()
+
+
+# --- Compression -------------------------------------------------------------
+
+
+def test_large_responses_are_gzipped(grid_db, monkeypatch):
+    monkeypatch.setattr("core.config.DB_PATH", grid_db)
+    client = TestClient(create_app())
+
+    response = client.get("/api/history/margin", headers={"Accept-Encoding": "gzip"})
+
+    assert response.headers["content-encoding"] == "gzip"
+    assert "accept-encoding" in response.headers["vary"].lower()
+    # The client decodes it transparently.
+    assert response.json()["state"] == "ok"
+
+
+def test_small_responses_are_not_gzipped():
+    response = TestClient(create_app()).get(
+        "/api/health", headers={"Accept-Encoding": "gzip"}
+    )
+
+    assert "content-encoding" not in response.headers
+
+
+def test_no_gzip_without_accept_encoding(grid_db, monkeypatch):
+    monkeypatch.setattr("core.config.DB_PATH", grid_db)
+    client = TestClient(create_app())
+
+    response = client.get("/api/history/margin", headers={"Accept-Encoding": "identity"})
+
+    assert "content-encoding" not in response.headers
+    assert response.json()["state"] == "ok"
+
+
+def test_gzipped_responses_keep_cors_headers(grid_db, monkeypatch):
+    monkeypatch.setattr("core.config.DB_PATH", grid_db)
+    client = TestClient(create_app([WEB_ORIGIN]))
+
+    response = client.get(
+        "/api/history/margin",
+        headers={"Origin": WEB_ORIGIN, "Accept-Encoding": "gzip"},
+    )
+
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.headers["access-control-allow-origin"] == WEB_ORIGIN
