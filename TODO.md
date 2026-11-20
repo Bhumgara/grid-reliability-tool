@@ -58,7 +58,7 @@ Needs: 1.1. Pull the pandas data preparation out of each live chart builder in
 - [x] Forecast: margin history in GW plus the forecast point (`build_forecast_graphs`)
 - [x] DRM change bridge steps (`build_drm_change_bridge`)
 - [x] Demand settlement bars, with an `estimated` flag on filled-in periods (`build_demand_settlement_bars`)
-- [ ] Typical-day profile: current, latest full day, median, IQR (`build_typical_day_demand_dashboard`)
+- [x] Typical-day profile: current, latest full day, median, IQR (`build_typical_day_demand_dashboard`)
 - [ ] Live generation snapshot and doughnut shares (`_latest_generation_snapshot`, `build_generation_doughnut_dashboard`)
 - [ ] Generation change (`build_generation_change_dashboard`)
 - [ ] Interconnector grouping (`INTERCONNECTOR_GROUPS`, `render_interconnector_list`)

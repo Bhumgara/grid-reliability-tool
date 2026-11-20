@@ -17,7 +17,7 @@ ChartSet = dict[str, Any]
 
 from core.views.common import require_columns as _require_columns
 from core.views.common import series_gw as _series_gw
-from core.views.demand import demand_settlement_view
+from core.views.demand import demand_settlement_view, typical_day_view
 from core.views.forecast import drm_bridge_view, forecast_view
 from dashboard.styles import (
     DEMAND_PROFILE_COLOURS, 
@@ -3851,128 +3851,11 @@ def build_typical_day_demand_dashboard(
     Showing the prior complete profile keeps the chart useful early in the
     day, when the current profile may contain only a few settlement periods.
     """
-    _require_columns(
-        demand_history,
-        [
-            "event_time_utc",
-            "demand_mw",
-        ],
-        "Typical-day demand",
-    )
+    view = typical_day_view(demand_history)
 
-    data = demand_history[
-        [
-            "event_time_utc",
-            "demand_mw",
-        ]
-    ].dropna().copy()
-
-    data[
-        "event_time_utc"
-    ] = pd.to_datetime(
-        data["event_time_utc"],
-        utc=True,
-    )
-
-    local = data[
-        "event_time_utc"
-    ].dt.tz_convert(
-        "Europe/London"
-    )
-
-    data["local_date"] = (
-        local.dt.date
-    )
-
-    data["settlement_slot"] = (
-        local.dt.hour * 2
-        + local.dt.minute // 30
-        + 1
-    )
-
-    data["demand_gw"] = (
-        data["demand_mw"]
-        / 1000
-    )
-
-    latest_date = data[
-        "local_date"
-    ].max()
-
-    reference = data[
-        data["local_date"]
-        < latest_date
-    ].copy()
-
-    if reference.empty:
-        raise ValueError(
-            "Typical-day demand needs at least "
-            "one earlier local day for comparison."
-        )
-
-    profile_counts = (
-        reference.groupby(
-            "local_date"
-        )["settlement_slot"]
-        .nunique()
-    )
-
-    complete_dates = (
-        profile_counts[
-            profile_counts >= 46
-        ].index
-    )
-
-    if len(
-        complete_dates
-    ):
-        latest_full_date = max(
-            complete_dates
-        )
-    else:
-        latest_full_date = reference[
-            "local_date"
-        ].max()
-
-    typical = (
-        reference.groupby(
-            "settlement_slot"
-        )["demand_gw"]
-        .agg(
-            q25=lambda values: (
-                values.quantile(
-                    0.25
-                )
-            ),
-            median="median",
-            q75=lambda values: (
-                values.quantile(
-                    0.75
-                )
-            ),
-        )
-        .reset_index()
-    )
-
-    current = data[
-        data["local_date"]
-        == latest_date
-    ][
-        [
-            "settlement_slot",
-            "demand_gw",
-        ]
-    ].copy()
-
-    latest_full = data[
-        data["local_date"]
-        == latest_full_date
-    ][
-        [
-            "settlement_slot",
-            "demand_gw",
-        ]
-    ].copy()
+    typical = view.typical
+    current = view.current
+    latest_full = view.latest_full
 
     line_data = pd.concat(
         [
