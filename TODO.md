@@ -55,7 +55,7 @@ Needs: 0.1
 Needs: 1.1. Pull the pandas data preparation out of each live chart builder in
 `dashboard/graphs.py` into `core/views/`. Altair keeps only the drawing.
 
-- [ ] Forecast: history plus forecast and uncertainty band (`build_forecast_graphs`)
+- [x] Forecast: margin history in GW plus the forecast point (`build_forecast_graphs`)
 - [ ] DRM change bridge steps (`build_drm_change_bridge`)
 - [ ] Demand settlement bars, with an `estimated` flag on filled-in periods (`build_demand_settlement_bars`)
 - [ ] Typical-day profile: current, latest full day, median, IQR (`build_typical_day_demand_dashboard`)

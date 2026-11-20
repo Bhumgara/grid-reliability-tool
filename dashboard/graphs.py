@@ -15,6 +15,8 @@ import streamlit as st
 
 ChartSet = dict[str, Any]
 
+from core.views.common import series_gw as _series_gw
+from core.views.forecast import forecast_view
 from dashboard.styles import (
     DEMAND_PROFILE_COLOURS, 
     FUEL_COLOURS, 
@@ -62,23 +64,6 @@ INTERCONNECTOR_GROUPS = {
 }
 
 
-def _datetime(df: pd.DataFrame, column: str) -> pd.DataFrame:
-    out = df.copy()
-    out[column] = pd.to_datetime(out[column], utc=True)
-    return out
-
-
-def _series_gw(
-    df: pd.DataFrame,
-    time_col: str,
-    value_col: str,
-    output_col: str,
-) -> pd.DataFrame:
-    out = _datetime(df[[time_col, value_col]].dropna(), time_col)
-    out[output_col] = out[value_col] / 1000
-    return out
-
-
 def _time_x(column: str = "event_time_utc") -> alt.X:
     return alt.X(f"{column}:T", title=None, axis=alt.Axis(labelAngle=0))
 
@@ -88,16 +73,12 @@ def build_forecast_graphs(
     forecast: dict,
 ) -> ChartSet:
     """Five views of the single 24-hour-ahead DRM prediction."""
-    history = _series_gw(
-        recent_margin,
-        "event_time_utc",
-        "derated_margin_mw",
-        "drm_gw",
-    )
+    view = forecast_view(recent_margin, forecast)
 
-    target = pd.Timestamp(forecast["target_time_utc"])
-    predicted = float(forecast["predicted_drm_mw"]) / 1000
-    latest = float(forecast["latest_drm_mw"]) / 1000
+    history = view.history
+    target = view.target_time_utc
+    predicted = view.predicted_drm_gw
+    latest = view.latest_drm_gw
 
     point = pd.DataFrame(
         {"event_time_utc": [target], "drm_gw": [predicted]}
