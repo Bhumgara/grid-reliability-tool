@@ -27,6 +27,10 @@ from core.views.generation import (
     latest_generation_snapshot as _latest_generation_snapshot,
 )
 from core.views.interconnectors import interconnector_view
+from core.views.model import (
+    find_baseline_column as _find_baseline_column,
+)
+from core.views.model import model_vs_persistence_view, validation_view
 from dashboard.styles import (
     DEMAND_PROFILE_COLOURS, 
     FUEL_COLOURS, 
@@ -661,12 +665,7 @@ def build_validation_graphs(predictions: pd.DataFrame) -> ChartSet:
       target_time_utc, target_drm_mw, predicted_drm_mw,
       error_mw, absolute_error_mw
     """
-    data = predictions.copy()
-    data["target_time_utc"] = pd.to_datetime(data["target_time_utc"], utc=True)
-    data["actual_gw"] = data["target_drm_mw"] / 1000
-    data["predicted_gw"] = data["predicted_drm_mw"] / 1000
-    data["error_gw"] = data["error_mw"] / 1000
-    data["absolute_error_gw"] = data["absolute_error_mw"] / 1000
+    data = validation_view(predictions)
 
     temporal = data.melt(
         id_vars="target_time_utc",
@@ -2178,27 +2177,6 @@ def build_error_direction_graph(
 # 10. Model vs persistence
 # ------------------------------------------------------------
 
-def _find_baseline_column(
-    predictions: pd.DataFrame,
-) -> str:
-    candidates = [
-        "baseline_drm_yesterday_mw",
-        "baseline_prediction_mw",
-        "persistence_drm_mw",
-        "baseline_drm_mw",
-    ]
-
-    for column in candidates:
-        if column in predictions.columns:
-            return column
-
-    raise ValueError(
-        "Model-vs-persistence chart needs a "
-        "baseline prediction column. Expected "
-        f"one of: {candidates}"
-    )
-
-
 def build_model_vs_persistence_graph(
     predictions: pd.DataFrame,
     baseline_col: str | None = None,
@@ -3181,129 +3159,14 @@ def build_model_vs_persistence_vertical(
     Starts the y-axis close to the observed MAE range instead of at zero so
     the model improvement is visually legible. Exact values remain in labels.
     """
-    _require_columns(
+    view = model_vs_persistence_view(
         predictions,
-        [
-            "target_drm_mw",
-            "predicted_drm_mw",
-        ],
-        "Model-vs-persistence",
+        baseline_col,
     )
 
-    if baseline_col is None:
-        baseline_col = (
-            _find_baseline_column(
-                predictions
-            )
-        )
-
-    _require_columns(
-        predictions,
-        [baseline_col],
-        "Model-vs-persistence",
-    )
-
-    data = predictions[
-        [
-            "target_drm_mw",
-            "predicted_drm_mw",
-            baseline_col,
-        ]
-    ].dropna().copy()
-
-    data["model_abs_error_mw"] = (
-        data["predicted_drm_mw"]
-        - data["target_drm_mw"]
-    ).abs()
-
-    data["baseline_abs_error_mw"] = (
-        data[baseline_col]
-        - data["target_drm_mw"]
-    ).abs()
-
-    threshold = (
-        data[
-            "target_drm_mw"
-        ].quantile(
-            0.10
-        )
-    )
-
-    rows = []
-
-    for label, segment in [
-        (
-            "Overall",
-            data,
-        ),
-        (
-            "Lowest 10% DRM",
-            data[
-                data[
-                    "target_drm_mw"
-                ]
-                <= threshold
-            ],
-        ),
-    ]:
-        if segment.empty:
-            continue
-
-        rows.extend(
-            [
-                {
-                    "segment": label,
-                    "method": "Persistence",
-                    "mae_gw": (
-                        segment[
-                            "baseline_abs_error_mw"
-                        ].mean()
-                        / 1000
-                    ),
-                },
-                {
-                    "segment": label,
-                    "method": "Ridge",
-                    "mae_gw": (
-                        segment[
-                            "model_abs_error_mw"
-                        ].mean()
-                        / 1000
-                    ),
-                },
-            ]
-        )
-
-    compare = pd.DataFrame(
-        rows
-    )
-
-    minimum = float(
-        compare["mae_gw"].min()
-    )
-
-    maximum = float(
-        compare["mae_gw"].max()
-    )
-
-    padding = max(
-        (
-            maximum
-            - minimum
-        )
-        * 0.35,
-        0.35,
-    )
-
-    lower_bound = max(
-        0,
-        minimum - padding,
-    )
-
-    upper_bound = (
-        maximum
-        + padding
-    )
+    compare = view.compare
+    lower_bound = view.axis_min_gw
+    upper_bound = view.axis_max_gw
 
     method_colour_scale = alt.Scale(
         domain=[
@@ -3429,74 +3292,6 @@ def build_model_vs_persistence_vertical(
                 "method:N",
                 legend=None,
                 scale=method_colour_scale,
-            ),
-        )
-    )
-
-    return (
-        lines
-        + points
-        + labels
-    ).properties(
-        title=(
-            "Ridge vs persistence · lower is better"
-        ),
-        height=300,
-    )
-
-    points = (
-        alt.Chart(compare)
-        .mark_point(
-            filled=True,
-            size=180,
-        )
-        .encode(
-            x=alt.X(
-                "segment:N",
-                sort=[
-                    "Overall",
-                    "Lowest 10% DRM",
-                ],
-            ),
-            y="mae_gw:Q",
-            color=alt.Color(
-                "method:N",
-                title=None,
-            ),
-            tooltip=[
-                "segment:N",
-                "method:N",
-                alt.Tooltip(
-                    "mae_gw:Q",
-                    title="MAE",
-                    format=".2f",
-                ),
-            ],
-        )
-    )
-
-    labels = (
-        alt.Chart(compare)
-        .mark_text(
-            dy=-14,
-            fontSize=12,
-        )
-        .encode(
-            x=alt.X(
-                "segment:N",
-                sort=[
-                    "Overall",
-                    "Lowest 10% DRM",
-                ],
-            ),
-            y="mae_gw:Q",
-            text=alt.Text(
-                "mae_gw:Q",
-                format=".2f",
-            ),
-            color=alt.Color(
-                "method:N",
-                legend=None,
             ),
         )
     )

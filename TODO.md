@@ -62,7 +62,7 @@ Needs: 1.1. Pull the pandas data preparation out of each live chart builder in
 - [x] Live generation snapshot and doughnut shares (`_latest_generation_snapshot`, `build_generation_doughnut_dashboard`)
 - [x] Generation change (`build_generation_change_dashboard`)
 - [x] Interconnector grouping (`INTERCONNECTOR_GROUPS`, `render_interconnector_list`)
-- [ ] Validation residuals and model vs persistence (`build_validation_graphs`, `build_model_vs_persistence_vertical`)
+- [x] Validation residuals and model vs persistence (`build_validation_graphs`, `build_model_vs_persistence_vertical`)
 - [ ] Add tests for each view function, and check that the Streamlit charts look unchanged
 
 ### 1.3 `chore/design-tokens`
