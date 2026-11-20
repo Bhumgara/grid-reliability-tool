@@ -116,7 +116,7 @@ the API and worker (Phase 2) can share it.
 Needs: 1.1
 
 - [x] Add `fastapi`, `uvicorn` and `pydantic` to the requirements
-- [ ] Add `backend/api/main.py` with an app factory and `GET /api/health`
+- [x] Add `backend/api/main.py` with an app factory and `GET /api/health`
 - [ ] Configure CORS from an environment variable, and document it in `.env.example`
 - [ ] Add shared response models (timestamps, `EmptyState` with `state` and `message`)
 - [ ] Add an API test for health using `TestClient`
