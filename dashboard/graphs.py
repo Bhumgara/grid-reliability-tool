@@ -19,7 +19,10 @@ from core.views.common import require_columns as _require_columns
 from core.views.common import series_gw as _series_gw
 from core.views.demand import demand_settlement_view, typical_day_view
 from core.views.forecast import drm_bridge_view, forecast_view
-from core.views.generation import generation_mix_view
+from core.views.generation import (
+    generation_change_view,
+    generation_mix_view,
+)
 from core.views.generation import (
     latest_generation_snapshot as _latest_generation_snapshot,
 )
@@ -3160,116 +3163,11 @@ def build_generation_change_dashboard(
     Direction is already encoded by the zero baseline, so colour is used
     for movement strength rather than increase/decrease.
     """
-    wide = generation.copy()
-
-    if "event_time_utc" not in wide.columns:
-        wide = wide.reset_index()
-
-    _require_columns(
-        wide,
-        ["event_time_utc"],
-        "Generation movement",
-    )
-
-    wide["event_time_utc"] = pd.to_datetime(
-        wide["event_time_utc"],
-        utc=True,
-    )
-
-    wide = wide.sort_values(
-        "event_time_utc"
-    )
-
-    latest_time = wide[
-        "event_time_utc"
-    ].max()
-
-    earlier = wide[
-        wide["event_time_utc"]
-        <= (
-            latest_time
-            - pd.Timedelta(
-                hours=lookback_hours
-            )
-        )
-    ]
-
-    if earlier.empty:
-        raise ValueError(
-            "Not enough generation history "
-            "for movement chart."
-        )
-
-    latest_row = wide.iloc[-1]
-    earlier_row = earlier.iloc[-1]
-
-    rows = []
-
-    for fuel in [
-        column
-        for column in wide.columns
-        if column
-        != "event_time_utc"
-    ]:
-        latest_value = (
-            latest_row[fuel]
-        )
-
-        earlier_value = (
-            earlier_row[fuel]
-        )
-
-        if (
-            pd.isna(latest_value)
-            or pd.isna(
-                earlier_value
-            )
-        ):
-            continue
-
-        delta_gw = (
-            float(latest_value)
-            - float(earlier_value)
-        ) / 1000
-
-        rows.append(
-            {
-                "fuel_type": fuel,
-                "delta_gw": delta_gw,
-                "absolute_change": abs(
-                    delta_gw
-                ),
-            }
-        )
-
-    movement = (
-        pd.DataFrame(rows)
-        .sort_values(
-            "absolute_change",
-            ascending=False,
-        )
-        .head(top_n)
-    )
-
-    if movement.empty:
-        raise ValueError(
-            "No generation movements available."
-        )
-
-    max_change = (
-        movement[
-            "absolute_change"
-        ].max()
-    )
-
-    movement["movement_strength"] = (
-        movement[
-            "absolute_change"
-        ]
-        / max_change
-        if max_change
-        else 0
-    )
+    movement = generation_change_view(
+        generation,
+        lookback_hours,
+        top_n,
+    ).movement
 
     zero = (
         alt.Chart(

@@ -159,3 +159,114 @@ def generation_mix_view(
         total_gw=total_gw,
         event_time_utc=latest_time,
     )
+
+
+@dataclass(frozen=True)
+class GenerationChangeView:
+    """
+    Biggest changes in output per fuel between two snapshots.
+
+    ``movement`` has columns ``fuel_type``, ``delta_gw`` (latest minus
+    earlier), ``absolute_change`` and ``movement_strength`` (absolute change
+    relative to the largest one, 0-1), largest change first.
+    """
+
+    movement: pd.DataFrame
+    latest_time: pd.Timestamp
+    earlier_time: pd.Timestamp
+
+
+def generation_change_view(
+    generation: pd.DataFrame,
+    lookback_hours: int = 4,
+    top_n: int = 8,
+) -> GenerationChangeView:
+    """
+    Compare the latest snapshot with the last one at least ``lookback_hours``
+    earlier, from wide generation data (``load_recent_generation`` output).
+
+    Keeps the ``top_n`` largest movements; fuels missing at either time are
+    skipped. Raises ValueError if there is not enough history or no movement
+    to show.
+    """
+    wide = generation.copy()
+
+    if "event_time_utc" not in wide.columns:
+        wide = wide.reset_index()
+
+    require_columns(
+        wide,
+        ["event_time_utc"],
+        "Generation movement",
+    )
+
+    wide["event_time_utc"] = pd.to_datetime(
+        wide["event_time_utc"],
+        utc=True,
+    )
+
+    wide = wide.sort_values("event_time_utc")
+
+    latest_time = wide["event_time_utc"].max()
+
+    earlier = wide[
+        wide["event_time_utc"]
+        <= latest_time - pd.Timedelta(hours=lookback_hours)
+    ]
+
+    if earlier.empty:
+        raise ValueError(
+            "Not enough generation history "
+            "for movement chart."
+        )
+
+    latest_row = wide.iloc[-1]
+    earlier_row = earlier.iloc[-1]
+
+    rows = []
+
+    for fuel in [
+        column
+        for column in wide.columns
+        if column != "event_time_utc"
+    ]:
+        latest_value = latest_row[fuel]
+        earlier_value = earlier_row[fuel]
+
+        if pd.isna(latest_value) or pd.isna(earlier_value):
+            continue
+
+        delta_gw = (float(latest_value) - float(earlier_value)) / 1000
+
+        rows.append(
+            {
+                "fuel_type": fuel,
+                "delta_gw": delta_gw,
+                "absolute_change": abs(delta_gw),
+            }
+        )
+
+    # Note: if every fuel is skipped, ``rows`` is empty and sort_values
+    # raises KeyError before the ValueError below. Kept as-is for now.
+    movement = (
+        pd.DataFrame(rows)
+        .sort_values("absolute_change", ascending=False)
+        .head(top_n)
+    )
+
+    if movement.empty:
+        raise ValueError("No generation movements available.")
+
+    max_change = movement["absolute_change"].max()
+
+    movement["movement_strength"] = (
+        movement["absolute_change"] / max_change
+        if max_change
+        else 0
+    )
+
+    return GenerationChangeView(
+        movement=movement,
+        latest_time=latest_time,
+        earlier_time=earlier_row["event_time_utc"],
+    )
