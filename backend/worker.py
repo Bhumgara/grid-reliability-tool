@@ -9,6 +9,10 @@ that is stale. From the repo root:
     python -m backend.worker          # loop until stopped
     python -m backend.worker --once   # one check, then exit
 
+Before the first check, it downloads the deployment bundle if the database
+is missing (core.deployment, using DEPLOYMENT_BUNDLE_URL). If that fails, the
+worker exits with code 1 rather than refreshing without data.
+
 The loop stops cleanly on Ctrl+C or SIGTERM (what container hosts send on
 shutdown), finishing any refresh in progress first.
 
@@ -28,7 +32,7 @@ import sys
 import threading
 from collections.abc import Callable
 
-from core import config
+from core import config, deployment
 
 logger = logging.getLogger("backend.worker")
 
@@ -39,6 +43,26 @@ def _default_refresh() -> dict:
     from pipelines.refresh import refresh_live_data
 
     return refresh_live_data()
+
+
+def prepare_data(
+    ensure_data: Callable[[], bool] = deployment.ensure_deployment_data,
+) -> bool:
+    """
+    Make sure the database exists before the first refresh.
+
+    Returns False (after logging why) if it is missing and could not be
+    downloaded, e.g. no bundle URL is set or the download failed.
+    """
+    try:
+        downloaded = ensure_data()
+    except Exception:
+        logger.exception("Could not set up the deployment data")
+        return False
+
+    if downloaded:
+        logger.info("Downloaded the deployment bundle")
+    return True
 
 
 def refresh_once(refresh: Callable[[], dict] = _default_refresh) -> dict | None:
@@ -104,6 +128,7 @@ def exit_code(status: dict | None) -> int:
 def main(
     argv: list[str] | None = None,
     refresh: Callable[[], dict] = _default_refresh,
+    ensure_data: Callable[[], bool] = deployment.ensure_deployment_data,
 ) -> int:
     parser = argparse.ArgumentParser(description="Keep the live grid data up to date.")
     parser.add_argument(
@@ -117,6 +142,9 @@ def main(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    if not prepare_data(ensure_data):
+        return 1
 
     if args.once:
         return exit_code(refresh_once(refresh))
