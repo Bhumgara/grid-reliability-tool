@@ -34,7 +34,7 @@ Settle these before the branch that depends on them.
 - [x] Fix `.gitignore` so the Python `lib/` rule does not hide Flutter's `app/lib/` (anchor it as `/lib/`)
 - [x] Add Flutter and Dart ignores (`app/build/`, `.dart_tool/`, `*.iml`, platform build outputs)
 - [x] Add a `tests/` package with pytest config and an empty smoke test
-- [ ] Add a small fixture SQLite database builder for tests (`tests/fixtures/`)
+- [x] Add a small fixture SQLite database builder for tests (`tests/fixtures/`)
 
 ---
 
