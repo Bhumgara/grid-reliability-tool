@@ -246,8 +246,9 @@ def generation_change_view(
             }
         )
 
-    # Note: if every fuel is skipped, ``rows`` is empty and sort_values
-    # raises KeyError before the ValueError below. Kept as-is for now.
+    if not rows:
+        raise ValueError("No generation movements available.")
+
     movement = (
         pd.DataFrame(rows)
         .sort_values("absolute_change", ascending=False)
