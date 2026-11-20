@@ -246,6 +246,12 @@ artifacts/*
 *.pkl
 *.joblib
 
+# Deployed model artefacts, committed so the app runs without retraining.
+# These come after the rules above so they override both artifacts/* and *.joblib.
+!artifacts/metrics.json
+!artifacts/feature_columns.json
+!artifacts/ridge_drm_24h.joblib
+
 # OS files
 .DS_Store
 Thumbs.db

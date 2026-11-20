@@ -12,7 +12,6 @@ from sklearn.linear_model import (
     LinearRegression,
     Ridge,
 )
-from xgboost import XGBRegressor
 
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
