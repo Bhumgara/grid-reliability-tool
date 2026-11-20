@@ -19,6 +19,10 @@ from core.views.common import require_columns as _require_columns
 from core.views.common import series_gw as _series_gw
 from core.views.demand import demand_settlement_view, typical_day_view
 from core.views.forecast import drm_bridge_view, forecast_view
+from core.views.generation import generation_mix_view
+from core.views.generation import (
+    latest_generation_snapshot as _latest_generation_snapshot,
+)
 from dashboard.styles import (
     DEMAND_PROFILE_COLOURS, 
     FUEL_COLOURS, 
@@ -771,107 +775,6 @@ def build_validation_graphs(predictions: pd.DataFrame) -> ChartSet:
 # ============================================================
 # Experimental / concept charts
 # ============================================================
-
-def _latest_generation_snapshot(
-    generation: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.Timestamp]:
-    """
-    Return the latest generation snapshot in long form.
-
-    Output columns:
-        fuel_type
-        generation_gw
-        share
-    """
-    wide = generation.copy()
-
-    if "event_time_utc" not in wide.columns:
-        wide = wide.reset_index()
-
-    _require_columns(
-        wide,
-        ["event_time_utc"],
-        "Generation snapshot",
-    )
-
-    wide["event_time_utc"] = pd.to_datetime(
-        wide["event_time_utc"],
-        utc=True,
-    )
-
-    latest_time = wide[
-        "event_time_utc"
-    ].max()
-
-    latest = wide[
-        wide["event_time_utc"]
-        == latest_time
-    ].copy()
-
-    if {
-        "fuel_type",
-        "generation_mw",
-    }.issubset(latest.columns):
-        mix = latest[
-            [
-                "fuel_type",
-                "generation_mw",
-            ]
-        ].copy()
-
-    else:
-        fuels = [
-            column
-            for column in latest.columns
-            if column != "event_time_utc"
-        ]
-
-        mix = latest.melt(
-            id_vars="event_time_utc",
-            value_vars=fuels,
-            var_name="fuel_type",
-            value_name="generation_mw",
-        )
-
-    mix = (
-        mix.dropna(
-            subset=["generation_mw"]
-        )
-        .groupby(
-            "fuel_type",
-            as_index=False,
-        )["generation_mw"]
-        .sum()
-    )
-
-    mix = mix[
-        mix["generation_mw"] > 0
-    ].copy()
-
-    mix["generation_gw"] = (
-        mix["generation_mw"]
-        / 1000
-    )
-
-    total = mix[
-        "generation_gw"
-    ].sum()
-
-    if total > 0:
-        mix["share"] = (
-            mix["generation_gw"]
-            / total
-        )
-    else:
-        mix["share"] = 0.0
-
-    mix = mix.sort_values(
-        "generation_gw",
-        ascending=False,
-    )
-
-    return mix, latest_time
-
 
 def _percentile(
     value: float,
@@ -2967,78 +2870,14 @@ def build_generation_doughnut_dashboard(
     Keeping labels out of the arc itself makes the chart much more robust
     when Streamlit renders it in a narrow column or on a different screen.
     """
-    mix, latest_time = (
-        _latest_generation_snapshot(
-            generation
-        )
+    view = generation_mix_view(
+        generation,
+        minimum_share,
     )
 
-    if mix.empty:
-        raise ValueError(
-            "No generation mix available."
-        )
-
-    small = (
-        mix["share"]
-        < minimum_share
-    )
-
-    if small.any():
-        other_gw = mix.loc[
-            small,
-            "generation_gw",
-        ].sum()
-
-        mix = mix.loc[
-            ~small
-        ].copy()
-
-        if other_gw > 0:
-            mix = pd.concat(
-                [
-                    mix,
-                    pd.DataFrame(
-                        {
-                            "fuel_type": [
-                                "OTHER"
-                            ],
-                            "generation_gw": [
-                                other_gw
-                            ],
-                        }
-                    ),
-                ],
-                ignore_index=True,
-            )
-
-    mix = (
-        mix.groupby(
-            "fuel_type",
-            as_index=False,
-        )["generation_gw"]
-        .sum()
-    )
-
-    total_gw = mix[
-        "generation_gw"
-    ].sum()
-
-    if total_gw <= 0:
-        raise ValueError(
-            "Generation mix total must be positive."
-        )
-
-    mix["share"] = (
-        mix["generation_gw"]
-        / total_gw
-    )
-
-    mix = mix.sort_values(
-        "generation_gw",
-        ascending=False,
-    ).reset_index(
-        drop=True
-    )
+    mix = view.mix
+    total_gw = view.total_gw
+    latest_time = view.event_time_utc
 
     mix["display_name"] = (
         mix["fuel_type"]
