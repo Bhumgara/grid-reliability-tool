@@ -15,6 +15,22 @@ import streamlit as st
 
 ChartSet = dict[str, Any]
 
+from core.views.common import require_columns as _require_columns
+from core.views.common import series_gw as _series_gw
+from core.views.demand import demand_settlement_view, typical_day_view
+from core.views.forecast import drm_bridge_view, forecast_view
+from core.views.generation import (
+    generation_change_view,
+    generation_mix_view,
+)
+from core.views.generation import (
+    latest_generation_snapshot as _latest_generation_snapshot,
+)
+from core.views.interconnectors import interconnector_view
+from core.views.model import (
+    find_baseline_column as _find_baseline_column,
+)
+from core.views.model import model_vs_persistence_view, validation_view
 from dashboard.styles import (
     DEMAND_PROFILE_COLOURS, 
     FUEL_COLOURS, 
@@ -36,48 +52,6 @@ FUEL_LABELS = {
     "OTHER": "Other",
 }
 
-INTERCONNECTOR_GROUPS = {
-    "Belgium": [
-        "INTNEM",
-    ],
-    "Denmark": [
-        "INTVKL",
-    ],
-    "France": [
-        "INTFR",
-        "INTIFA2",
-        "INTELEC",
-    ],
-    "Ireland": [
-        "INTIRL",
-        "INTEW",
-        "INTGRNL",
-    ],
-    "Netherlands": [
-        "INTNED",
-    ],
-    "Norway": [
-        "INTNSL",
-    ],
-}
-
-
-def _datetime(df: pd.DataFrame, column: str) -> pd.DataFrame:
-    out = df.copy()
-    out[column] = pd.to_datetime(out[column], utc=True)
-    return out
-
-
-def _series_gw(
-    df: pd.DataFrame,
-    time_col: str,
-    value_col: str,
-    output_col: str,
-) -> pd.DataFrame:
-    out = _datetime(df[[time_col, value_col]].dropna(), time_col)
-    out[output_col] = out[value_col] / 1000
-    return out
-
 
 def _time_x(column: str = "event_time_utc") -> alt.X:
     return alt.X(f"{column}:T", title=None, axis=alt.Axis(labelAngle=0))
@@ -88,16 +62,12 @@ def build_forecast_graphs(
     forecast: dict,
 ) -> ChartSet:
     """Five views of the single 24-hour-ahead DRM prediction."""
-    history = _series_gw(
-        recent_margin,
-        "event_time_utc",
-        "derated_margin_mw",
-        "drm_gw",
-    )
+    view = forecast_view(recent_margin, forecast)
 
-    target = pd.Timestamp(forecast["target_time_utc"])
-    predicted = float(forecast["predicted_drm_mw"]) / 1000
-    latest = float(forecast["latest_drm_mw"]) / 1000
+    history = view.history
+    target = view.target_time_utc
+    predicted = view.predicted_drm_gw
+    latest = view.latest_drm_gw
 
     point = pd.DataFrame(
         {"event_time_utc": [target], "drm_gw": [predicted]}
@@ -695,12 +665,7 @@ def build_validation_graphs(predictions: pd.DataFrame) -> ChartSet:
       target_time_utc, target_drm_mw, predicted_drm_mw,
       error_mw, absolute_error_mw
     """
-    data = predictions.copy()
-    data["target_time_utc"] = pd.to_datetime(data["target_time_utc"], utc=True)
-    data["actual_gw"] = data["target_drm_mw"] / 1000
-    data["predicted_gw"] = data["predicted_drm_mw"] / 1000
-    data["error_gw"] = data["error_mw"] / 1000
-    data["absolute_error_gw"] = data["absolute_error_mw"] / 1000
+    data = validation_view(predictions)
 
     temporal = data.melt(
         id_vars="target_time_utc",
@@ -788,124 +753,6 @@ def build_validation_graphs(predictions: pd.DataFrame) -> ChartSet:
 # ============================================================
 # Experimental / concept charts
 # ============================================================
-
-def _require_columns(
-    df: pd.DataFrame,
-    columns: list[str],
-    context: str,
-) -> None:
-    missing = [
-        column
-        for column in columns
-        if column not in df.columns
-    ]
-
-    if missing:
-        raise ValueError(
-            f"{context} requires columns: {missing}"
-        )
-
-
-def _latest_generation_snapshot(
-    generation: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.Timestamp]:
-    """
-    Return the latest generation snapshot in long form.
-
-    Output columns:
-        fuel_type
-        generation_gw
-        share
-    """
-    wide = generation.copy()
-
-    if "event_time_utc" not in wide.columns:
-        wide = wide.reset_index()
-
-    _require_columns(
-        wide,
-        ["event_time_utc"],
-        "Generation snapshot",
-    )
-
-    wide["event_time_utc"] = pd.to_datetime(
-        wide["event_time_utc"],
-        utc=True,
-    )
-
-    latest_time = wide[
-        "event_time_utc"
-    ].max()
-
-    latest = wide[
-        wide["event_time_utc"]
-        == latest_time
-    ].copy()
-
-    if {
-        "fuel_type",
-        "generation_mw",
-    }.issubset(latest.columns):
-        mix = latest[
-            [
-                "fuel_type",
-                "generation_mw",
-            ]
-        ].copy()
-
-    else:
-        fuels = [
-            column
-            for column in latest.columns
-            if column != "event_time_utc"
-        ]
-
-        mix = latest.melt(
-            id_vars="event_time_utc",
-            value_vars=fuels,
-            var_name="fuel_type",
-            value_name="generation_mw",
-        )
-
-    mix = (
-        mix.dropna(
-            subset=["generation_mw"]
-        )
-        .groupby(
-            "fuel_type",
-            as_index=False,
-        )["generation_mw"]
-        .sum()
-    )
-
-    mix = mix[
-        mix["generation_mw"] > 0
-    ].copy()
-
-    mix["generation_gw"] = (
-        mix["generation_mw"]
-        / 1000
-    )
-
-    total = mix[
-        "generation_gw"
-    ].sum()
-
-    if total > 0:
-        mix["share"] = (
-            mix["generation_gw"]
-            / total
-        )
-    else:
-        mix["share"] = 0.0
-
-    mix = mix.sort_values(
-        "generation_gw",
-        ascending=False,
-    )
-
-    return mix, latest_time
-
 
 def _percentile(
     value: float,
@@ -1117,56 +964,22 @@ def build_drm_change_bridge(
     pixel offsets, so the points and labels remain inside the plot when
     the Streamlit column changes width.
     """
-    latest = (
-        float(
-            current_drm_mw
-        )
-        / 1000
-    )
+    view = drm_bridge_view(forecast, current_drm_mw)
 
-    predicted = (
-        float(
-            forecast["predicted_drm_mw"]
-        )
-        / 1000
-    )
-
-    delta = predicted - latest
-
-    lower = min(
-        latest,
-        predicted,
-    )
-
-    upper = max(
-        latest,
-        predicted,
-    )
-
-    span = max(
-        upper - lower,
-        0.5,
-    )
-
-    padding = max(
-        span * 0.30,
-        0.65,
-    )
+    latest = view.current_drm_gw
+    predicted = view.predicted_drm_gw
+    delta = view.change_gw
 
     x_domain = [
-        lower - padding,
-        upper + padding,
+        view.axis_min_gw,
+        view.axis_max_gw,
     ]
 
-    direction = (
-        "↑"
-        if delta > 0
-        else (
-            "↓"
-            if delta < 0
-            else "→"
-        )
-    )
+    direction = {
+        "up": "↑",
+        "down": "↓",
+        "flat": "→",
+    }[view.direction]
 
     points = pd.DataFrame(
         {
@@ -1274,7 +1087,7 @@ def build_drm_change_bridge(
         )
     )
 
-    if delta > 0:
+    if view.direction == "up":
         arrow_shape = "triangle-right"
 
         current_align = "right"
@@ -1283,7 +1096,7 @@ def build_drm_change_bridge(
         forecast_align = "left"
         forecast_dx = 10
 
-    elif delta < 0:
+    elif view.direction == "down":
         arrow_shape = "triangle-left"
 
         current_align = "left"
@@ -2364,27 +2177,6 @@ def build_error_direction_graph(
 # 10. Model vs persistence
 # ------------------------------------------------------------
 
-def _find_baseline_column(
-    predictions: pd.DataFrame,
-) -> str:
-    candidates = [
-        "baseline_drm_yesterday_mw",
-        "baseline_prediction_mw",
-        "persistence_drm_mw",
-        "baseline_drm_mw",
-    ]
-
-    for column in candidates:
-        if column in predictions.columns:
-            return column
-
-    raise ValueError(
-        "Model-vs-persistence chart needs a "
-        "baseline prediction column. Expected "
-        f"one of: {candidates}"
-    )
-
-
 def build_model_vs_persistence_graph(
     predictions: pd.DataFrame,
     baseline_col: str | None = None,
@@ -2915,45 +2707,12 @@ def build_demand_settlement_bars(
     """
     Settlement-period demand bars.
 
-    Internal missing half-hours are linearly interpolated for display only
-    and explicitly labelled Estimated. Leading/trailing gaps remain blank.
-    Nothing is written back to the source data.
+    Internal missing half-hours are estimated for display (see
+    core.views.demand) and drawn faded, labelled Estimated.
     """
-    _require_columns(
-        demand,
-        [
-            "event_time_utc",
-            "demand_mw",
-        ],
-        "Demand settlement bars",
-    )
+    view = demand_settlement_view(demand)
 
-    data = demand[
-        [
-            "event_time_utc",
-            "demand_mw",
-        ]
-    ].copy()
-
-    data["event_time_utc"] = pd.to_datetime(
-        data["event_time_utc"],
-        utc=True,
-    )
-
-    data = (
-        data.sort_values(
-            "event_time_utc"
-        )
-        .drop_duplicates(
-            "event_time_utc",
-            keep="last",
-        )
-        .set_index(
-            "event_time_utc"
-        )
-    )
-
-    if data.empty:
+    if view.empty:
         return (
             alt.Chart(
                 pd.DataFrame(
@@ -2973,53 +2732,22 @@ def build_demand_settlement_bars(
             )
         )
 
-    complete_index = pd.date_range(
-        start=data.index.min(),
-        end=data.index.max(),
-        freq="30min",
-        tz="UTC",
-    )
-
-    data = data.reindex(
-        complete_index
-    )
-
-    data.index.name = (
-        "event_time_utc"
-    )
-
-    data["data_type"] = (
-        data["demand_mw"]
-        .notna()
-        .map(
+    data = view.assign(
+        data_type=view["estimated"].map(
             {
-                True: "Observed",
-                False: "Estimated",
+                False: "Observed",
+                True: "Estimated",
             }
         )
-    )
-
-    data["display_demand_mw"] = (
-        data["demand_mw"]
-        .interpolate(
-            method="time",
-            limit_area="inside",
-        )
-    )
-
-    data = (
-        data.reset_index()
-        .dropna(
-            subset=[
-                "display_demand_mw"
-            ]
-        )
-    )
-
-    data["demand_gw"] = (
-        data["display_demand_mw"]
-        / 1000
-    )
+    )[
+        [
+            "event_time_utc",
+            "demand_mw",
+            "data_type",
+            "display_demand_mw",
+            "demand_gw",
+        ]
+    ]
 
     return (
         alt.Chart(data)
@@ -3099,78 +2827,14 @@ def build_generation_doughnut_dashboard(
     Keeping labels out of the arc itself makes the chart much more robust
     when Streamlit renders it in a narrow column or on a different screen.
     """
-    mix, latest_time = (
-        _latest_generation_snapshot(
-            generation
-        )
+    view = generation_mix_view(
+        generation,
+        minimum_share,
     )
 
-    if mix.empty:
-        raise ValueError(
-            "No generation mix available."
-        )
-
-    small = (
-        mix["share"]
-        < minimum_share
-    )
-
-    if small.any():
-        other_gw = mix.loc[
-            small,
-            "generation_gw",
-        ].sum()
-
-        mix = mix.loc[
-            ~small
-        ].copy()
-
-        if other_gw > 0:
-            mix = pd.concat(
-                [
-                    mix,
-                    pd.DataFrame(
-                        {
-                            "fuel_type": [
-                                "OTHER"
-                            ],
-                            "generation_gw": [
-                                other_gw
-                            ],
-                        }
-                    ),
-                ],
-                ignore_index=True,
-            )
-
-    mix = (
-        mix.groupby(
-            "fuel_type",
-            as_index=False,
-        )["generation_gw"]
-        .sum()
-    )
-
-    total_gw = mix[
-        "generation_gw"
-    ].sum()
-
-    if total_gw <= 0:
-        raise ValueError(
-            "Generation mix total must be positive."
-        )
-
-    mix["share"] = (
-        mix["generation_gw"]
-        / total_gw
-    )
-
-    mix = mix.sort_values(
-        "generation_gw",
-        ascending=False,
-    ).reset_index(
-        drop=True
-    )
+    mix = view.mix
+    total_gw = view.total_gw
+    latest_time = view.event_time_utc
 
     mix["display_name"] = (
         mix["fuel_type"]
@@ -3327,65 +2991,26 @@ def build_generation_doughnut_dashboard(
 def render_interconnector_list(
     interconnectors: pd.DataFrame,
 ) -> None:
-    if interconnectors.empty:
+    view = interconnector_view(interconnectors)
+
+    if view.flows.empty:
         st.caption(
             "No current interconnector data."
         )
         return
 
-    data = interconnectors.copy()
+    arrows = {
+        "Import": "→",
+        "Export": "←",
+        "Idle": "—",
+    }
 
-    if "flow_gw" not in data.columns:
-        if "generation_mw" not in data.columns:
-            raise ValueError(
-                "Interconnector data requires "
-                "'flow_gw' or 'generation_mw'."
-            )
+    rows = [
+        {**row, "arrow": arrows[row["direction"]]}
+        for row in view.flows.to_dict("records")
+    ]
 
-        data["flow_gw"] = (
-            data["generation_mw"]
-            / 1000
-        )
-
-    flows = (
-        data
-        .set_index("fuel_type")["flow_gw"]
-        .to_dict()
-    )
-
-    rows = []
-
-    for country, codes in (
-        INTERCONNECTOR_GROUPS.items()
-    ):
-        flow_gw = sum(
-            flows.get(code, 0.0)
-            for code in codes
-        )
-
-        if flow_gw > 0.01:
-            direction = "Import"
-            arrow = "→"
-        elif flow_gw < -0.01:
-            direction = "Export"
-            arrow = "←"
-        else:
-            direction = "Idle"
-            arrow = "—"
-
-        rows.append(
-            {
-                "country": country,
-                "flow_gw": flow_gw,
-                "direction": direction,
-                "arrow": arrow,
-            }
-        )
-
-    net_flow = sum(
-        row["flow_gw"]
-        for row in rows
-    )
+    net_flow = view.net_flow_gw
 
     if net_flow > 0:
         net_label = (
@@ -3453,116 +3078,11 @@ def build_generation_change_dashboard(
     Direction is already encoded by the zero baseline, so colour is used
     for movement strength rather than increase/decrease.
     """
-    wide = generation.copy()
-
-    if "event_time_utc" not in wide.columns:
-        wide = wide.reset_index()
-
-    _require_columns(
-        wide,
-        ["event_time_utc"],
-        "Generation movement",
-    )
-
-    wide["event_time_utc"] = pd.to_datetime(
-        wide["event_time_utc"],
-        utc=True,
-    )
-
-    wide = wide.sort_values(
-        "event_time_utc"
-    )
-
-    latest_time = wide[
-        "event_time_utc"
-    ].max()
-
-    earlier = wide[
-        wide["event_time_utc"]
-        <= (
-            latest_time
-            - pd.Timedelta(
-                hours=lookback_hours
-            )
-        )
-    ]
-
-    if earlier.empty:
-        raise ValueError(
-            "Not enough generation history "
-            "for movement chart."
-        )
-
-    latest_row = wide.iloc[-1]
-    earlier_row = earlier.iloc[-1]
-
-    rows = []
-
-    for fuel in [
-        column
-        for column in wide.columns
-        if column
-        != "event_time_utc"
-    ]:
-        latest_value = (
-            latest_row[fuel]
-        )
-
-        earlier_value = (
-            earlier_row[fuel]
-        )
-
-        if (
-            pd.isna(latest_value)
-            or pd.isna(
-                earlier_value
-            )
-        ):
-            continue
-
-        delta_gw = (
-            float(latest_value)
-            - float(earlier_value)
-        ) / 1000
-
-        rows.append(
-            {
-                "fuel_type": fuel,
-                "delta_gw": delta_gw,
-                "absolute_change": abs(
-                    delta_gw
-                ),
-            }
-        )
-
-    movement = (
-        pd.DataFrame(rows)
-        .sort_values(
-            "absolute_change",
-            ascending=False,
-        )
-        .head(top_n)
-    )
-
-    if movement.empty:
-        raise ValueError(
-            "No generation movements available."
-        )
-
-    max_change = (
-        movement[
-            "absolute_change"
-        ].max()
-    )
-
-    movement["movement_strength"] = (
-        movement[
-            "absolute_change"
-        ]
-        / max_change
-        if max_change
-        else 0
-    )
+    movement = generation_change_view(
+        generation,
+        lookback_hours,
+        top_n,
+    ).movement
 
     zero = (
         alt.Chart(
@@ -3639,129 +3159,14 @@ def build_model_vs_persistence_vertical(
     Starts the y-axis close to the observed MAE range instead of at zero so
     the model improvement is visually legible. Exact values remain in labels.
     """
-    _require_columns(
+    view = model_vs_persistence_view(
         predictions,
-        [
-            "target_drm_mw",
-            "predicted_drm_mw",
-        ],
-        "Model-vs-persistence",
+        baseline_col,
     )
 
-    if baseline_col is None:
-        baseline_col = (
-            _find_baseline_column(
-                predictions
-            )
-        )
-
-    _require_columns(
-        predictions,
-        [baseline_col],
-        "Model-vs-persistence",
-    )
-
-    data = predictions[
-        [
-            "target_drm_mw",
-            "predicted_drm_mw",
-            baseline_col,
-        ]
-    ].dropna().copy()
-
-    data["model_abs_error_mw"] = (
-        data["predicted_drm_mw"]
-        - data["target_drm_mw"]
-    ).abs()
-
-    data["baseline_abs_error_mw"] = (
-        data[baseline_col]
-        - data["target_drm_mw"]
-    ).abs()
-
-    threshold = (
-        data[
-            "target_drm_mw"
-        ].quantile(
-            0.10
-        )
-    )
-
-    rows = []
-
-    for label, segment in [
-        (
-            "Overall",
-            data,
-        ),
-        (
-            "Lowest 10% DRM",
-            data[
-                data[
-                    "target_drm_mw"
-                ]
-                <= threshold
-            ],
-        ),
-    ]:
-        if segment.empty:
-            continue
-
-        rows.extend(
-            [
-                {
-                    "segment": label,
-                    "method": "Persistence",
-                    "mae_gw": (
-                        segment[
-                            "baseline_abs_error_mw"
-                        ].mean()
-                        / 1000
-                    ),
-                },
-                {
-                    "segment": label,
-                    "method": "Ridge",
-                    "mae_gw": (
-                        segment[
-                            "model_abs_error_mw"
-                        ].mean()
-                        / 1000
-                    ),
-                },
-            ]
-        )
-
-    compare = pd.DataFrame(
-        rows
-    )
-
-    minimum = float(
-        compare["mae_gw"].min()
-    )
-
-    maximum = float(
-        compare["mae_gw"].max()
-    )
-
-    padding = max(
-        (
-            maximum
-            - minimum
-        )
-        * 0.35,
-        0.35,
-    )
-
-    lower_bound = max(
-        0,
-        minimum - padding,
-    )
-
-    upper_bound = (
-        maximum
-        + padding
-    )
+    compare = view.compare
+    lower_bound = view.axis_min_gw
+    upper_bound = view.axis_max_gw
 
     method_colour_scale = alt.Scale(
         domain=[
@@ -3902,74 +3307,6 @@ def build_model_vs_persistence_vertical(
         height=300,
     )
 
-    points = (
-        alt.Chart(compare)
-        .mark_point(
-            filled=True,
-            size=180,
-        )
-        .encode(
-            x=alt.X(
-                "segment:N",
-                sort=[
-                    "Overall",
-                    "Lowest 10% DRM",
-                ],
-            ),
-            y="mae_gw:Q",
-            color=alt.Color(
-                "method:N",
-                title=None,
-            ),
-            tooltip=[
-                "segment:N",
-                "method:N",
-                alt.Tooltip(
-                    "mae_gw:Q",
-                    title="MAE",
-                    format=".2f",
-                ),
-            ],
-        )
-    )
-
-    labels = (
-        alt.Chart(compare)
-        .mark_text(
-            dy=-14,
-            fontSize=12,
-        )
-        .encode(
-            x=alt.X(
-                "segment:N",
-                sort=[
-                    "Overall",
-                    "Lowest 10% DRM",
-                ],
-            ),
-            y="mae_gw:Q",
-            text=alt.Text(
-                "mae_gw:Q",
-                format=".2f",
-            ),
-            color=alt.Color(
-                "method:N",
-                legend=None,
-            ),
-        )
-    )
-
-    return (
-        lines
-        + points
-        + labels
-    ).properties(
-        title=(
-            "Ridge vs persistence · lower is better"
-        ),
-        height=300,
-    )
-
 
 def build_typical_day_demand_dashboard(
     demand_history: pd.DataFrame,
@@ -3983,128 +3320,11 @@ def build_typical_day_demand_dashboard(
     Showing the prior complete profile keeps the chart useful early in the
     day, when the current profile may contain only a few settlement periods.
     """
-    _require_columns(
-        demand_history,
-        [
-            "event_time_utc",
-            "demand_mw",
-        ],
-        "Typical-day demand",
-    )
+    view = typical_day_view(demand_history)
 
-    data = demand_history[
-        [
-            "event_time_utc",
-            "demand_mw",
-        ]
-    ].dropna().copy()
-
-    data[
-        "event_time_utc"
-    ] = pd.to_datetime(
-        data["event_time_utc"],
-        utc=True,
-    )
-
-    local = data[
-        "event_time_utc"
-    ].dt.tz_convert(
-        "Europe/London"
-    )
-
-    data["local_date"] = (
-        local.dt.date
-    )
-
-    data["settlement_slot"] = (
-        local.dt.hour * 2
-        + local.dt.minute // 30
-        + 1
-    )
-
-    data["demand_gw"] = (
-        data["demand_mw"]
-        / 1000
-    )
-
-    latest_date = data[
-        "local_date"
-    ].max()
-
-    reference = data[
-        data["local_date"]
-        < latest_date
-    ].copy()
-
-    if reference.empty:
-        raise ValueError(
-            "Typical-day demand needs at least "
-            "one earlier local day for comparison."
-        )
-
-    profile_counts = (
-        reference.groupby(
-            "local_date"
-        )["settlement_slot"]
-        .nunique()
-    )
-
-    complete_dates = (
-        profile_counts[
-            profile_counts >= 46
-        ].index
-    )
-
-    if len(
-        complete_dates
-    ):
-        latest_full_date = max(
-            complete_dates
-        )
-    else:
-        latest_full_date = reference[
-            "local_date"
-        ].max()
-
-    typical = (
-        reference.groupby(
-            "settlement_slot"
-        )["demand_gw"]
-        .agg(
-            q25=lambda values: (
-                values.quantile(
-                    0.25
-                )
-            ),
-            median="median",
-            q75=lambda values: (
-                values.quantile(
-                    0.75
-                )
-            ),
-        )
-        .reset_index()
-    )
-
-    current = data[
-        data["local_date"]
-        == latest_date
-    ][
-        [
-            "settlement_slot",
-            "demand_gw",
-        ]
-    ].copy()
-
-    latest_full = data[
-        data["local_date"]
-        == latest_full_date
-    ][
-        [
-            "settlement_slot",
-            "demand_gw",
-        ]
-    ].copy()
+    typical = view.typical
+    current = view.current
+    latest_full = view.latest_full
 
     line_data = pd.concat(
         [

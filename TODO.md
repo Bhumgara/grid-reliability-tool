@@ -55,15 +55,15 @@ Needs: 0.1
 Needs: 1.1. Pull the pandas data preparation out of each live chart builder in
 `dashboard/graphs.py` into `core/views/`. Altair keeps only the drawing.
 
-- [ ] Forecast: history plus forecast and uncertainty band (`build_forecast_graphs`)
-- [ ] DRM change bridge steps (`build_drm_change_bridge`)
-- [ ] Demand settlement bars, with an `estimated` flag on filled-in periods (`build_demand_settlement_bars`)
-- [ ] Typical-day profile: current, latest full day, median, IQR (`build_typical_day_demand_dashboard`)
-- [ ] Live generation snapshot and doughnut shares (`_latest_generation_snapshot`, `build_generation_doughnut_dashboard`)
-- [ ] Generation change (`build_generation_change_dashboard`)
-- [ ] Interconnector grouping (`INTERCONNECTOR_GROUPS`, `render_interconnector_list`)
-- [ ] Validation residuals and model vs persistence (`build_validation_graphs`, `build_model_vs_persistence_vertical`)
-- [ ] Add tests for each view function, and check that the Streamlit charts look unchanged
+- [x] Forecast: margin history in GW plus the forecast point (`build_forecast_graphs`)
+- [x] DRM change bridge steps (`build_drm_change_bridge`)
+- [x] Demand settlement bars, with an `estimated` flag on filled-in periods (`build_demand_settlement_bars`)
+- [x] Typical-day profile: current, latest full day, median, IQR (`build_typical_day_demand_dashboard`)
+- [x] Live generation snapshot and doughnut shares (`_latest_generation_snapshot`, `build_generation_doughnut_dashboard`)
+- [x] Generation change (`build_generation_change_dashboard`)
+- [x] Interconnector grouping (`INTERCONNECTOR_GROUPS`, `render_interconnector_list`)
+- [x] Validation residuals and model vs persistence (`build_validation_graphs`, `build_model_vs_persistence_vertical`)
+- [x] Add tests for each view function, and check that the Streamlit charts look unchanged
 
 ### 1.3 `chore/design-tokens`
 
@@ -72,6 +72,16 @@ Needs: 0.1. Can run in parallel with 1.1 and 1.2.
 - [ ] Export `PALETTE`, `FUEL_COLOURS`, `MODEL_COLOURS` and `DEMAND_PROFILE_COLOURS` to `tokens/tokens.json`
 - [ ] Make `dashboard/styles.py` load its colours from `tokens.json`
 - [ ] Add dark-mode values for each token
+
+### 1.4 `fix/view-error-handling`
+
+Needs: 1.2. Behaviour fixes found while extracting the views. Each view should
+raise `ValueError` for unusable data, and the dashboard should show a message
+instead of breaking the page.
+
+- [ ] Raise the intended `ValueError` (not `KeyError`) in `generation_change_view` when no fuel has values at both snapshots, with a test
+- [ ] Show an info message instead of breaking the page when the generation change chart can't be built (`render_generation_section`)
+- [ ] Raise `ValueError` (not `KeyError`) in `model_vs_persistence_view` when no complete rows remain, with a test
 
 ---
 
