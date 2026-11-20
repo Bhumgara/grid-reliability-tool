@@ -90,7 +90,8 @@ def model_vs_persistence_view(
     actual margins.
 
     ``baseline_col`` defaults to the first of ``BASELINE_COLUMNS`` found.
-    Raises ValueError if required columns are missing.
+    Raises ValueError if required columns are missing or no row has all
+    three values.
     """
     require_columns(
         predictions,
@@ -145,10 +146,14 @@ def model_vs_persistence_view(
             ]
         )
 
+    if not rows:
+        raise ValueError(
+            "Model-vs-persistence needs at least one prediction "
+            "with actual, model and baseline values."
+        )
+
     compare = pd.DataFrame(rows)
 
-    # Note: if no rows survive dropna, ``compare`` has no columns and this
-    # raises KeyError. Kept as-is for now.
     minimum = float(compare["mae_gw"].min())
     maximum = float(compare["mae_gw"].max())
 

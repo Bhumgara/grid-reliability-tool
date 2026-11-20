@@ -115,3 +115,13 @@ def test_change_view_top_n_and_missing_fuels(wide_generation):
 def test_change_view_needs_enough_history(wide_generation):
     with pytest.raises(ValueError, match="Not enough generation history"):
         generation_change_view(wide_generation.tail(3))
+
+
+@pytest.mark.parametrize("row", [-1, -9], ids=["latest", "earlier"])
+def test_change_view_rejects_snapshot_with_no_values(wide_generation, row):
+    # Row -9 is the earlier snapshot: 4 hours (8 half-hours) before the latest.
+    missing = wide_generation.copy()
+    missing.iloc[row, :] = float("nan")
+
+    with pytest.raises(ValueError, match="No generation movements available"):
+        generation_change_view(missing, lookback_hours=4)
