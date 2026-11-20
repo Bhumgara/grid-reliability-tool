@@ -20,7 +20,7 @@ Settle these before the branch that depends on them.
 
 - [ ] Chart library: fl_chart (MIT) by default, or Syncfusion (check licence). Needed by Phase 5.
 - [ ] Live updates: server-sent events, or simple polling at first. Needed by 2.4.
-- [ ] Backend hosting target (VPS, container platform, etc.). Needed by 7.2.
+- [ ] Backend hosting target (VPS, container platform, etc.). The current Streamlit app reads `st.secrets`, which suggests Streamlit Community Cloud; that host can't run the FastAPI service or a separate worker. Needed by 2.3 and 7.2.
 - [ ] Linux web view: check current package support, or go native-only on Linux. Needed by 7.1.
 - [ ] Keep `dashboard/swiper.py` as an internal Streamlit tool, or retire it. Needed by 8.1.
 
@@ -84,6 +84,26 @@ instead of breaking the page.
 - [x] Raise `ValueError` (not `KeyError`) in `model_vs_persistence_view` when no complete rows remain, with a test
 - [x] Show an info message instead of breaking the page when the generation doughnut can't be built (`render_generation_section`)
 
+### 1.5 `chore/post-merge-cleanup`
+
+Needs: the merge of `main` into `flutter-front-end-migration`. Small fixes for
+loose ends that merge left behind.
+
+- [x] Record the post-merge follow-ups in `TODO.md`
+- [ ] Remove the unused `from xgboost import XGBRegressor` in `model/train.py` (xgboost is no longer a dependency)
+- [ ] Add `.gitignore` exceptions for the committed `artifacts/` files (`metrics.json`, `feature_columns.json`, `ridge_drm_24h.joblib`)
+- [ ] Fix the "every 15 minutes" comment in `app.py` (the refresh check now runs every 150 seconds)
+
+### 1.6 `refactor/deployment-core`
+
+Needs: 1.5. `main` added deployment code outside `core/`. Bring it in line so
+the API and worker (Phase 2) can share it.
+
+- [ ] Make the `core/config.py` paths absolute from the repo root, use them in `dashboard/bootstrap.py`, and update the smoke test for `DB_PATH`
+- [ ] Move `ensure_deployment_data()` into `core/`, taking the bundle URL as a parameter or from `DEPLOYMENT_BUNDLE_URL`; `bootstrap.py` passes the `st.secrets` value, and the debug prints become logging. Test it with a local zip (no network)
+- [ ] Point the hard-coded paths in `pipelines/`, `model/`, `core/api/`, `core/db.py` and `dashboard/swiper.py` at `core/config.py`
+- [ ] Add one shared refresh-interval constant (currently 150 seconds) in `core/config.py`, used by `bootstrap.py`
+
 ---
 
 ## Phase 2: Backend API
@@ -100,7 +120,7 @@ Needs: 1.1
 
 ### 2.2 `feature/api-endpoints`
 
-Needs: 1.2, 2.1
+Needs: 1.2, 1.6, 2.1
 
 - [ ] `GET /api/status` (refresh status)
 - [ ] `GET /api/forecast/hero` (forecast, margin percentile, bridge steps)
@@ -114,9 +134,10 @@ Needs: 1.2, 2.1
 
 ### 2.3 `feature/refresh-worker`
 
-Needs: 0.1
+Needs: 1.6
 
-- [ ] Add `backend/worker.py`, a standalone loop that calls `refresh_live_data()` every 15 minutes
+- [ ] Add `backend/worker.py`, a standalone loop that calls `refresh_live_data()` on the shared refresh interval from `core/config.py`
+- [ ] Have the worker call `ensure_deployment_data()` before its first refresh
 - [ ] Have the worker record a `last_refresh_completed` timestamp the API can read
 - [ ] Put the Streamlit thread in `dashboard/bootstrap.py` behind an environment flag, so only one refresher runs
 - [ ] Document running the API and the worker in `README.md`
