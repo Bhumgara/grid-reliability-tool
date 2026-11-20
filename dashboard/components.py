@@ -16,6 +16,10 @@ from dashboard.graphs import (
 
 from html import escape
 
+from core.margin import (
+    calculate_margin_percentile,
+    describe_margin_percentile,
+)
 from dashboard.styles import PALETTE
 
 def _render_data_status_banner(
@@ -186,42 +190,6 @@ def render_refresh_status(
         st.caption(
             "● Live data refresh active"
         )
-
-def calculate_margin_percentile(
-    predicted_drm_mw: float,
-    history: pd.Series,
-) -> float:
-    clean = pd.to_numeric(
-        history,
-        errors="coerce",
-    ).dropna()
-
-    if clean.empty:
-        return 50.0
-
-    return float(
-        (
-            clean
-            < predicted_drm_mw
-        ).mean()
-        * 100
-    )
-
-
-def describe_margin_percentile(
-    percentile: float,
-) -> str:
-    if percentile <= 10:
-        return "historically tight"
-
-    if percentile <= 25:
-        return "below the typical historical range"
-
-    if percentile <= 75:
-        return "around the typical historical range"
-
-    return "high relative to historical margins"
-
 
 def render_forecast_hero(
     forecast: dict | None,
