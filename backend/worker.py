@@ -13,6 +13,10 @@ Before the first check, it downloads the deployment bundle if the database
 is missing (core.deployment, using DEPLOYMENT_BUNDLE_URL). If that fails, the
 worker exits with code 1 rather than refreshing without data.
 
+After each check that completes, it records the time in
+``core.config.LAST_REFRESH_PATH`` (``last_refresh_completed_utc``), so the API
+can tell clients when the data may have changed.
+
 The loop stops cleanly on Ctrl+C or SIGTERM (what container hosts send on
 shutdown), finishing any refresh in progress first.
 
@@ -26,11 +30,14 @@ state is "failed".
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import signal
 import sys
 import threading
 from collections.abc import Callable
+from datetime import datetime, timezone
+from pathlib import Path
 
 from core import config, deployment
 
@@ -65,12 +72,43 @@ def prepare_data(
     return True
 
 
-def refresh_once(refresh: Callable[[], dict] = _default_refresh) -> dict | None:
+def record_refresh_completed(
+    completed: datetime,
+    path: Path | None = None,
+) -> None:
     """
-    Run one refresh check and log the outcome.
+    Write ``completed`` to ``LAST_REFRESH_PATH`` (read by
+    ``core.queries.load_last_refresh_completed``).
+
+    Written to a temporary file and then renamed, so readers never see a
+    half-written file.
+    """
+    path = path or config.LAST_REFRESH_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps({"last_refresh_completed_utc": completed.isoformat()}) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def refresh_once(
+    refresh: Callable[[], dict] = _default_refresh,
+    now: Callable[[], datetime] = _utc_now,
+) -> dict | None:
+    """
+    Run one refresh check, log the outcome and record when it completed.
 
     Returns the status from ``refresh``, or None if it raised; errors are
-    logged, not raised, so one failed check doesn't stop the worker.
+    logged, not raised, so one failed check doesn't stop the worker. A check
+    that raised isn't recorded as completed. Any completed check is, even a
+    "failed" one, because the live display data may still have changed.
     """
     try:
         status = refresh()
@@ -83,6 +121,12 @@ def refresh_once(refresh: Callable[[], dict] = _default_refresh) -> dict | None:
         status.get("state", "unknown"),
         status.get("message", ""),
     )
+
+    try:
+        record_refresh_completed(now())
+    except OSError:
+        logger.exception("Could not record the refresh completion time")
+
     return status
 
 

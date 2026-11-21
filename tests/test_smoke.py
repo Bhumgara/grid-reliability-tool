@@ -26,6 +26,7 @@ def test_project_root_is_the_repo_root():
         "METRICS_PATH",
         "FORECAST_PATH",
         "STATUS_PATH",
+        "LAST_REFRESH_PATH",
         "VALIDATION_PATH",
         "TEST_PATH",
     ],

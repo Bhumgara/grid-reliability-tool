@@ -1,13 +1,24 @@
 """Tests for the standalone refresh worker, with a fake refresh (no network)."""
 
+import json
 import logging
 import signal
 import threading
+from datetime import datetime, timezone
 
+import pandas as pd
 import pytest
 
 from backend import worker
-from core import config
+from core import config, queries
+
+
+@pytest.fixture(autouse=True)
+def last_refresh_path(tmp_path, monkeypatch):
+    """Keep every test's completion record out of the real data folder."""
+    path = tmp_path / "processed" / "last_refresh.json"
+    monkeypatch.setattr(config, "LAST_REFRESH_PATH", path)
+    return path
 
 
 class StoppingRefresh:
@@ -259,3 +270,69 @@ def test_default_data_step_is_core_deployment():
 
     default = inspect.signature(worker.main).parameters["ensure_data"].default
     assert default is deployment.ensure_deployment_data
+
+
+# --- Completion record -----------------------------------------------------------
+
+COMPLETED = datetime(2026, 11, 20, 10, 1, 30, tzinfo=timezone.utc)
+
+
+def test_completed_check_is_recorded(last_refresh_path):
+    worker.refresh_once(lambda: {"state": "fresh"}, now=lambda: COMPLETED)
+
+    assert json.loads(last_refresh_path.read_text(encoding="utf-8")) == {
+        "last_refresh_completed_utc": "2026-11-20T10:01:30+00:00"
+    }
+    assert queries.load_last_refresh_completed() == pd.Timestamp("2026-11-20T10:01:30Z")
+    # Written via a temporary file that is renamed into place.
+    assert not last_refresh_path.with_suffix(".tmp").exists()
+
+
+def test_failed_state_is_still_recorded(last_refresh_path):
+    worker.refresh_once(lambda: {"state": "failed"}, now=lambda: COMPLETED)
+
+    assert queries.load_last_refresh_completed() == pd.Timestamp(COMPLETED)
+
+
+def test_check_that_raised_is_not_recorded(last_refresh_path):
+    def broken():
+        raise RuntimeError("API down")
+
+    worker.refresh_once(broken, now=lambda: COMPLETED)
+
+    assert not last_refresh_path.exists()
+
+
+def test_each_check_replaces_the_record(last_refresh_path):
+    later = COMPLETED.replace(minute=4)
+
+    worker.refresh_once(lambda: {}, now=lambda: COMPLETED)
+    worker.refresh_once(lambda: {}, now=lambda: later)
+
+    assert queries.load_last_refresh_completed() == pd.Timestamp(later)
+
+
+def test_write_errors_are_logged_not_raised(monkeypatch, caplog):
+    def no_disk(completed, path=None):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(worker, "record_refresh_completed", no_disk)
+
+    assert worker.refresh_once(lambda: {"state": "fresh"}) == {"state": "fresh"}
+    assert "Could not record the refresh completion time" in caplog.text
+
+
+def test_record_creates_the_folder(tmp_path):
+    path = tmp_path / "new" / "folder" / "last_refresh.json"
+
+    worker.record_refresh_completed(COMPLETED, path=path)
+
+    assert path.is_file()
+
+
+def test_default_time_is_utc_now():
+    before = datetime.now(timezone.utc)
+    now = worker._utc_now()
+
+    assert now.tzinfo == timezone.utc
+    assert before <= now <= datetime.now(timezone.utc)

@@ -383,6 +383,31 @@ def load_refresh_status(
     return _read_json_or_none(path or config.STATUS_PATH) or {}
 
 
+def load_last_refresh_completed(
+    path: Path | None = None,
+) -> pd.Timestamp | None:
+    """
+    When the refresh worker last finished a check (UTC), or None if it hasn't
+    yet, or the file is unreadable.
+    """
+    record = _read_json_or_none(path or config.LAST_REFRESH_PATH)
+
+    if not isinstance(record, dict):
+        return None
+
+    try:
+        completed = pd.Timestamp(record.get("last_refresh_completed_utc"))
+    except (ValueError, TypeError):
+        return None
+
+    if completed is pd.NaT:
+        return None
+
+    if completed.tzinfo is None:
+        return completed.tz_localize("UTC")
+    return completed.tz_convert("UTC")
+
+
 def load_validation_predictions(
     validation_path: Path | None = None,
     test_path: Path | None = None,
