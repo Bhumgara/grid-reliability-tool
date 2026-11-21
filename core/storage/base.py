@@ -11,8 +11,8 @@ Conventions every implementation follows:
 
 - Times in returned frames are timezone-aware UTC (``datetime64[ns, UTC]``).
 - Read methods return an empty frame or series when there is no data, and
-  raise ``core.queries.DatabaseUnavailableError`` when the store itself is
-  missing (e.g. the deployment data hasn't been set up yet).
+  raise ``DatabaseUnavailableError`` when the store itself is missing (e.g.
+  the deployment data hasn't been set up yet).
 - Upserts insert new rows and replace existing ones with the same key, so
   re-fetching an overlapping time window is safe.
 - Rows passed to upserts are the normalised records from ``core.normalise``
@@ -38,6 +38,10 @@ Dataset = Literal[
 ]
 
 Row = Mapping[str, Any]
+
+
+class DatabaseUnavailableError(RuntimeError):
+    """The store does not exist (e.g. deployment data not set up yet)."""
 
 
 @runtime_checkable

@@ -1,10 +1,11 @@
 """
 Storage backends for the grid data.
 
-``GridStore`` (in ``core.storage.base``) is the interface; implementations
-follow in later commits (SQLite first). See TODO.md 2.6.
+``GridStore`` (in ``core.storage.base``) is the interface; ``SQLiteStore``
+(``core.storage.sqlite``) is the implementation used today. See TODO.md 2.6.
 """
 
-from core.storage.base import Dataset, GridStore, Row
+from core.storage.base import DatabaseUnavailableError, Dataset, GridStore, Row
+from core.storage.sqlite import SQLiteStore
 
-__all__ = ["Dataset", "GridStore", "Row"]
+__all__ = ["DatabaseUnavailableError", "Dataset", "GridStore", "Row", "SQLiteStore"]

@@ -21,10 +21,8 @@ from pathlib import Path
 import pandas as pd
 
 from core import config
-
-
-class DatabaseUnavailableError(RuntimeError):
-    """The database file does not exist (e.g. deployment data not set up yet)."""
+# Defined with the storage interface; re-exported here for existing callers.
+from core.storage.base import DatabaseUnavailableError  # noqa: F401
 
 
 @contextmanager
