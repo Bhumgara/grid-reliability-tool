@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from core import queries
+from core.storage import SQLiteStore
 from tests.fixtures.grid_db import (
     DEFAULT_DAYS,
     FIXTURE_END,
@@ -138,7 +139,7 @@ def test_missing_database_raises_and_is_not_created(loader, tmp_path):
 
 
 def test_database_is_opened_read_only(grid_db):
-    with queries._connect(grid_db) as conn:
+    with SQLiteStore(grid_db)._read() as conn:
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
             conn.execute("DELETE FROM elexon_demand_indo")
 

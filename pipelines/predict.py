@@ -1,11 +1,10 @@
 import json
-import sqlite3
 
 import joblib
 import pandas as pd
 
 from core import config
-from core.config import DB_PATH
+from core.storage import GridStore, get_file_store, get_grid_store
 from model.features import (
     add_calendar_features,
     add_drm_lag_features,
@@ -15,10 +14,7 @@ from model.features import (
 )
 from pipelines.build_dataset import (
     add_baseline,
-    load_demand,
-    load_fuelhh,
-    load_margin_history,
-    load_targets,
+    load_model_inputs,
 )
 from pipelines.helper import (
     merge_asof_forecast_origin,
@@ -28,8 +24,6 @@ from pipelines.helper import (
 MODEL_PATH = config.MODEL_PATH
 
 FEATURE_COLUMNS_PATH = config.FEATURE_COLUMNS_PATH
-
-OUTPUT_PATH = config.FORECAST_PATH
 
 FORECAST_HORIZON_HOURS = 24
 
@@ -325,57 +319,22 @@ def build_forecast_payload(
 def save_forecast(
     forecast: dict,
 ) -> None:
-    OUTPUT_PATH.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    # Write atomically so Streamlit never reads a
-    # partially written JSON file.
-    temporary_path = OUTPUT_PATH.with_suffix(
-        ".tmp"
-    )
-
-    with temporary_path.open(
-        "w",
-        encoding="utf-8",
-    ) as file:
-        json.dump(
-            forecast,
-            file,
-            indent=2,
-        )
-
-    temporary_path.replace(
-        OUTPUT_PATH
-    )
+    # The file store replaces the file in one step, so readers never see a
+    # partly written forecast.
+    get_file_store().write_json("forecast", forecast)
 
 
-def run_prediction() -> dict:
+def run_prediction(store: GridStore | None = None) -> dict:
+    """Predict 24 hours ahead; ``store`` defaults to the configured backend."""
     feature_columns = (
         load_feature_columns()
     )
 
     model = load_saved_model()
 
-    with sqlite3.connect(
-        str(DB_PATH)
-    ) as conn:
-        targets = load_targets(
-            conn
-        )
-
-        demand = load_demand(
-            conn
-        )
-
-        fuel = load_fuelhh(
-            conn
-        )
-
-        margin = load_margin_history(
-            conn
-        )
+    targets, demand, fuel, margin = load_model_inputs(
+        store or get_grid_store()
+    )
 
     forecast_origin = (
         choose_forecast_origin(
@@ -438,7 +397,7 @@ def run_prediction() -> dict:
         f"{forecast['latest_drm_mw']:,.2f} MW",
     )
     print(
-        f"Saved to {OUTPUT_PATH}"
+        f"Saved to {get_file_store().location('forecast')}"
     )
 
     return forecast
