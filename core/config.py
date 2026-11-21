@@ -30,6 +30,10 @@ METRICS_PATH = ARTIFACTS_DIR / "metrics.json"
 MODEL_DATASET_PATH = PROCESSED_DIR / "model_dataset.csv"
 FORECAST_PATH = PROCESSED_DIR / "latest_forecast.json"
 STATUS_PATH = PROCESSED_DIR / "refresh_status.json"
+# When the refresh worker last finished a check. Kept apart from STATUS_PATH,
+# which is overwritten with a "refreshing" status (no completion time) while
+# a refresh runs.
+LAST_REFRESH_PATH = PROCESSED_DIR / "last_refresh.json"
 VALIDATION_PATH = PROCESSED_DIR / "validation_predictions.csv"
 TEST_PATH = PROCESSED_DIR / "test_predictions.csv"
 

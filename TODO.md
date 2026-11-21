@@ -141,12 +141,12 @@ Needs: 1.2, 1.6, 2.1
 
 Needs: 1.6
 
-- [ ] Add `backend/worker.py`, a standalone loop that calls `refresh_live_data()` on the shared refresh interval from `core/config.py`
-- [ ] Add a `--once` mode that refreshes once and exits, so a scheduler (cron, Cloud Scheduler with a Cloud Run job) can run it instead of the loop
-- [ ] Have the worker call `ensure_deployment_data()` before its first refresh
-- [ ] Have the worker record a `last_refresh_completed` timestamp the API can read
-- [ ] Put the Streamlit thread in `dashboard/bootstrap.py` behind an environment flag, so only one refresher runs
-- [ ] Document running the API and the worker in `README.md`
+- [x] Add `backend/worker.py`, a standalone loop that calls `refresh_live_data()` on the shared refresh interval from `core/config.py`
+- [x] Add a `--once` mode that refreshes once and exits, so a scheduler (cron, Cloud Scheduler with a Cloud Run job) can run it instead of the loop
+- [x] Have the worker call `ensure_deployment_data()` before its first refresh
+- [x] Have the worker record a `last_refresh_completed` timestamp the API can read
+- [x] Put the Streamlit thread in `dashboard/bootstrap.py` behind an environment flag, so only one refresher runs
+- [x] Document running the API and the worker in `README.md`
 
 ### 2.4 `feature/change-detection`
 
