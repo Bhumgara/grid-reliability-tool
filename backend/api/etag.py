@@ -1,5 +1,5 @@
 """
-ETag and 304 Not Modified for the API's GET responses.
+ETag, 304 Not Modified and Cache-Control for the API's GET responses.
 
 Each successful GET under ``/api`` gets a weak ETag built from a hash of the
 response body. A client that sends it back in ``If-None-Match`` gets
@@ -9,6 +9,13 @@ The hash is of the content, not the refresh time, so it also changes when
 the model is retrained or a deploy changes a response's format. Weak
 (``W/"..."``) because gzip, which runs outside this middleware, changes the
 bytes but not the content.
+
+Cache-Control is ``no-cache`` on successful responses: clients may store
+them but must revalidate (a cheap 304) before reuse. A ``max-age`` would let
+the browser (and so the Flutter web build) answer a refetch from its own
+cache with pre-refresh data, after /api/status had already shown a newer
+refresh. Error responses get ``no-store`` so a temporary error is never
+reused.
 """
 
 from __future__ import annotations
@@ -21,6 +28,10 @@ from starlette.datastructures import MutableHeaders
 # Response headers kept on a 304 (RFC 9110 15.4.5); the body and its
 # Content-Type and Content-Length are dropped.
 _HEADERS_KEPT_ON_304 = {"cache-control", "content-location", "date", "etag", "expires", "vary"}
+
+
+CACHE_CONTROL_OK = "no-cache"
+CACHE_CONTROL_ERROR = "no-store"
 
 
 def etag_for(body: bytes) -> str:
@@ -45,23 +56,24 @@ def matches(if_none_match: str, etag: str) -> bool:
 
 
 def add_etag_middleware(app: FastAPI, prefix: str) -> None:
-    """Add the ETag middleware for GET requests under ``prefix``."""
+    """Add the ETag and Cache-Control middleware for GET requests under ``prefix``."""
 
     @app.middleware("http")
     async def etag_middleware(request: Request, call_next) -> Response:
         response = await call_next(request)
 
-        if (
-            request.method != "GET"
-            or response.status_code != 200
-            or not request.url.path.startswith(prefix)
-        ):
+        if request.method != "GET" or not request.url.path.startswith(prefix):
+            return response
+
+        if response.status_code != 200:
+            response.headers["cache-control"] = CACHE_CONTROL_ERROR
             return response
 
         body = b"".join([chunk async for chunk in response.body_iterator])
         etag = etag_for(body)
         headers = MutableHeaders(raw=list(response.raw_headers))
         headers["etag"] = etag
+        headers["cache-control"] = CACHE_CONTROL_OK
 
         if matches(request.headers.get("if-none-match", ""), etag):
             kept = {

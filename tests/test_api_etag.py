@@ -154,3 +154,38 @@ def test_304_keeps_cors_headers(web_client):
 
     assert response.status_code == 304
     assert response.headers["access-control-allow-origin"] == WEB_ORIGIN
+
+
+# --- Cache-Control ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", ["/api/status", "/api/grid/now", "/api/model/metrics"])
+def test_successful_responses_must_revalidate(client, path):
+    assert client.get(path).headers["cache-control"] == "no-cache"
+
+
+def test_304_keeps_cache_control(client):
+    etag = client.get("/api/grid/now").headers["etag"]
+
+    response = client.get("/api/grid/now", headers={"If-None-Match": etag})
+
+    assert response.status_code == 304
+    assert response.headers["cache-control"] == "no-cache"
+
+
+def test_errors_are_never_stored(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "missing.db")
+    client = TestClient(create_app())
+
+    assert client.get("/api/grid/now").headers["cache-control"] == "no-store"
+    assert client.get("/api/history/margin", params={"days": 0}).headers["cache-control"] == "no-store"
+    assert client.get("/api/nope").headers["cache-control"] == "no-store"
+
+
+def test_no_max_age_anywhere(client):
+    for path in ["/api/status", "/api/grid/now", "/api/history/demand"]:
+        assert "max-age" not in client.get(path).headers["cache-control"]
+
+
+def test_routes_outside_the_api_have_no_cache_control(client):
+    assert "cache-control" not in client.get("/openapi.json").headers
