@@ -1,11 +1,10 @@
 import json
-import sqlite3
 
 import joblib
 import pandas as pd
 
 from core import config
-from core.config import DB_PATH
+from core.storage import GridStore, SQLiteStore
 from model.features import (
     add_calendar_features,
     add_drm_lag_features,
@@ -15,10 +14,7 @@ from model.features import (
 )
 from pipelines.build_dataset import (
     add_baseline,
-    load_demand,
-    load_fuelhh,
-    load_margin_history,
-    load_targets,
+    load_model_inputs,
 )
 from pipelines.helper import (
     merge_asof_forecast_origin,
@@ -351,31 +347,17 @@ def save_forecast(
     )
 
 
-def run_prediction() -> dict:
+def run_prediction(store: GridStore | None = None) -> dict:
+    """Predict 24 hours ahead; ``store`` defaults to the SQLite database."""
     feature_columns = (
         load_feature_columns()
     )
 
     model = load_saved_model()
 
-    with sqlite3.connect(
-        str(DB_PATH)
-    ) as conn:
-        targets = load_targets(
-            conn
-        )
-
-        demand = load_demand(
-            conn
-        )
-
-        fuel = load_fuelhh(
-            conn
-        )
-
-        margin = load_margin_history(
-            conn
-        )
+    targets, demand, fuel, margin = load_model_inputs(
+        store or SQLiteStore()
+    )
 
     forecast_origin = (
         choose_forecast_origin(

@@ -1,23 +1,29 @@
 """
-Parity tests: SQLiteStore returns (and writes) exactly what the existing
-functions in core.queries, core.db, pipelines.build_dataset and
-pipelines.refresh do, against the fixture database.
+Tests for SQLiteStore against the fixture database (tests/fixtures/grid_db.py).
 
-Once those functions delegate to the store (the next commits), these become
-plain SQLiteStore tests.
+Expected values come from the fixture's constants or from SQL run directly on
+the file, not from the store's own queries. (Backend-independent behaviour
+gets its own contract tests later in TODO.md 2.6.)
 """
 
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
-from pandas.testing import assert_frame_equal, assert_series_equal
 
-from core import db, queries
 from core.storage import DatabaseUnavailableError, GridStore, SQLiteStore
-from pipelines import build_dataset, refresh
+from pipelines.build_dataset import FUEL_TYPES
+from tests.fixtures.grid_db import (
+    DEFAULT_DAYS,
+    FIXTURE_END,
+    FUEL_BASE_MW,
+    FUELINST_LATEST,
+)
 
+END = pd.Timestamp(FIXTURE_END)
+LATEST_SNAPSHOT = pd.Timestamp(FUELINST_LATEST)
+HALF_HOUR = pd.Timedelta(minutes=30)
 TIME = datetime(2026, 11, 20, 10, 0, tzinfo=timezone.utc)
 
 
@@ -26,11 +32,21 @@ def store(grid_db):
     return SQLiteStore(grid_db)
 
 
-def _times_to_utc(df: pd.DataFrame) -> pd.DataFrame:
-    """Old FUELINST loaders return event times as strings; the store parses them."""
-    out = df.copy()
-    out["event_time_utc"] = pd.to_datetime(out["event_time_utc"], utc=True)
-    return out
+def _sql(path, query, params=()):
+    with sqlite3.connect(path) as conn:
+        return conn.execute(query, params).fetchall()
+
+
+def _scalar(path, query, params=()):
+    return _sql(path, query, params)[0][0]
+
+
+def _assert_half_hourly_to_end(times: pd.Series, count: int):
+    times = pd.Series(times).reset_index(drop=True)
+    assert len(times) == count
+    assert str(times.dt.tz) == "UTC"
+    assert times.iloc[-1] == END
+    assert times.is_monotonic_increasing
 
 
 def test_satisfies_the_interface(store):
@@ -41,55 +57,105 @@ def test_satisfies_the_interface(store):
 
 
 @pytest.mark.parametrize("days", [1, 7])
-@pytest.mark.parametrize(
-    ("method", "loader"),
-    [
-        ("recent_margin", queries.load_recent_margin),
-        ("recent_demand", queries.load_recent_demand),
-        ("recent_generation", queries.load_recent_generation),
-    ],
-)
-def test_recent_reads_match_core_queries(store, grid_db, method, loader, days):
-    assert_frame_equal(getattr(store, method)(days), loader(days, db_path=grid_db))
+def test_recent_margin(store, grid_db, days):
+    df = store.recent_margin(days)
+
+    assert list(df.columns) == ["event_time_utc", "derated_margin_mw"]
+    # The fixture's NULL margin sits mid-history, outside these windows.
+    _assert_half_hourly_to_end(df["event_time_utc"], days * 48)
+    assert df["derated_margin_mw"].notna().all()
+    # Values are the 1-hour-ahead rows, not the 8-hour ones.
+    expected_last = _scalar(
+        grid_db,
+        "SELECT derated_margin_mw FROM elexon_margin_lolpdrm "
+        "WHERE forecast_horizon_hours = 1 AND event_time_utc = ?",
+        (FIXTURE_END.isoformat(),),
+    )
+    assert df["derated_margin_mw"].iloc[-1] == expected_last
 
 
-def test_live_generation_mix_matches(store, grid_db):
-    expected = _times_to_utc(queries.load_live_generation_mix(db_path=grid_db))
+@pytest.mark.parametrize("days", [1, 7])
+def test_recent_demand(store, grid_db, days):
+    df = store.recent_demand(days)
 
-    assert_frame_equal(store.live_generation_mix(), expected)
+    assert list(df.columns) == ["event_time_utc", "demand_mw"]
+    _assert_half_hourly_to_end(df["event_time_utc"], days * 48)
+    assert df["demand_mw"].iloc[-1] == _scalar(
+        grid_db,
+        "SELECT demand_mw FROM elexon_demand_indo WHERE event_time_utc = ?",
+        (FIXTURE_END.isoformat(),),
+    )
+
+
+def test_recent_generation(store, grid_db):
+    df = store.recent_generation(7)
+
+    assert set(df.columns) == set(FUEL_BASE_MW)
+    assert str(df.index.tz) == "UTC"
+    assert df.index[-1] == END
+    assert df.index[0] == END - pd.Timedelta(days=7)
+    assert df.loc[END, "WIND"] == FUEL_BASE_MW["WIND"]
+    assert df.loc[END, "CCGT"] == _scalar(
+        grid_db,
+        "SELECT generation_mw FROM elexon_generation_fuelhh "
+        "WHERE fuel_type = 'CCGT' AND event_time_utc = ?",
+        (FIXTURE_END.isoformat(),),
+    )
+
+
+def test_live_generation_mix(store):
+    df = store.live_generation_mix().set_index("fuel_type")
+
+    assert set(df.index) == {
+        "CCGT", "COAL", "OIL", "NUCLEAR", "BIOMASS", "NPSHYD", "OTHER", "WIND", "SOLAR",
+    }
+    assert (df["event_time_utc"] == LATEST_SNAPSHOT).all()
+    # Latest snapshot only; OCGT merges into CCGT; NESO actual ('A') wind is added.
+    assert df.loc["CCGT", "generation_mw"] == FUEL_BASE_MW["CCGT"] + FUEL_BASE_MW["OCGT"]
+    assert df.loc["WIND", "generation_mw"] == FUEL_BASE_MW["WIND"] + 1200.0
+    assert df.loc["SOLAR", "generation_mw"] == 0.0
+    assert (df["embedded_data_status"] == "A").all()
+
+
+def test_live_generation_mix_falls_back_to_neso_forecast(store, grid_db):
+    with sqlite3.connect(grid_db) as conn:
+        conn.execute("DELETE FROM neso_demand_update WHERE forecast_actual_indicator = 'A'")
+
+    df = store.live_generation_mix().set_index("fuel_type")
+
+    assert df.loc["WIND", "generation_mw"] == FUEL_BASE_MW["WIND"] + 999.0
+    assert df.loc["SOLAR", "generation_mw"] == 999.0
+    assert (df["embedded_data_status"] == "F").all()
 
 
 def test_live_generation_mix_without_neso(store, grid_db):
     with sqlite3.connect(grid_db) as conn:
         conn.execute("DELETE FROM neso_demand_update")
-    expected = _times_to_utc(queries.load_live_generation_mix(db_path=grid_db))
 
-    result = store.live_generation_mix()
+    df = store.live_generation_mix().set_index("fuel_type")
 
-    assert_frame_equal(result, expected)
-    assert result["embedded_data_status"].isna().all()
-
-
-def test_live_interconnectors_match(store, grid_db):
-    expected = _times_to_utc(queries.load_live_interconnectors(db_path=grid_db))
-
-    assert_frame_equal(store.live_interconnectors(), expected)
+    assert df.loc["WIND", "generation_mw"] == FUEL_BASE_MW["WIND"]
+    assert df["embedded_data_status"].isna().all()
 
 
-def test_margin_history_matches(store, grid_db):
-    assert_series_equal(store.margin_history(), queries.load_margin_history(db_path=grid_db))
+def test_live_interconnectors(store):
+    df = store.live_interconnectors()
+
+    assert list(df.columns) == ["event_time_utc", "fuel_type", "generation_mw"]
+    assert df["fuel_type"].tolist() == ["INTFR", "INTNED", "INTNSL"]
+    assert df["generation_mw"].tolist() == [FUEL_BASE_MW[f] for f in ["INTFR", "INTNED", "INTNSL"]]
+    assert (df["event_time_utc"] == LATEST_SNAPSHOT).all()
 
 
-def test_times_are_utc(store):
-    for frame in [store.recent_margin(7), store.live_generation_mix(), store.live_interconnectors()]:
-        assert str(frame["event_time_utc"].dt.tz) == "UTC"
-    assert str(store.recent_generation(7).index.tz) == "UTC"
+def test_margin_history(store):
+    history = store.margin_history()
+
+    # Every 1-hour-ahead row except the fixture's one NULL.
+    assert len(history) == DEFAULT_DAYS * 48 - 1
+    assert history.notna().all()
 
 
-@pytest.mark.parametrize(
-    "method",
-    ["recent_margin", "recent_demand", "recent_generation"],
-)
+@pytest.mark.parametrize("method", ["recent_margin", "recent_demand", "recent_generation"])
 def test_recent_reads_on_empty_db(empty_grid_db, method):
     assert getattr(SQLiteStore(empty_grid_db), method)(7).empty
 
@@ -139,29 +205,93 @@ def test_default_path_is_read_from_config_on_each_call(grid_db, monkeypatch):
 # --- Model inputs ----------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("method", "loader"),
-    [
-        ("model_targets", build_dataset.load_targets),
-        ("model_demand", build_dataset.load_demand),
-        ("model_margin_history", build_dataset.load_margin_history),
-    ],
-)
-def test_model_inputs_match_build_dataset(store, grid_db, method, loader):
-    with sqlite3.connect(grid_db) as conn:
-        expected = loader(conn)
+def test_model_targets(store):
+    df = store.model_targets()
 
-    assert_frame_equal(getattr(store, method)(), expected)
+    assert list(df.columns) == [
+        "target_time_utc", "target_published_at_utc", "settlement_date",
+        "settlement_period", "target_drm_mw",
+    ]
+    _assert_half_hourly_to_end(df["target_time_utc"], DEFAULT_DAYS * 48 - 1)
+    # The fixture publishes each margin an hour before its event.
+    assert (df["target_time_utc"] - df["target_published_at_utc"] == pd.Timedelta(hours=1)).all()
 
 
-def test_model_fuel_matches_build_dataset(store, grid_db):
-    with sqlite3.connect(grid_db) as conn:
-        expected = build_dataset.load_fuelhh(conn)
+def test_model_demand(store):
+    df = store.model_demand()
 
-    assert_frame_equal(store.model_fuel(build_dataset.FUEL_TYPES), expected)
+    assert list(df.columns) == ["demand_event_time_utc", "demand_published_at_utc", "demand_mw"]
+    assert len(df) == DEFAULT_DAYS * 48
+    assert str(df["demand_event_time_utc"].dt.tz) == "UTC"
+    assert df["demand_published_at_utc"].is_monotonic_increasing
+
+
+def test_model_fuel(store):
+    df = store.model_fuel(FUEL_TYPES)
+
+    assert list(df.columns) == [
+        "fuel_event_time_utc", "fuel_published_at_utc",
+        "biomass_mw", "ccgt_mw", "nuclear_mw", "wind_mw",
+    ]
+    assert len(df) == DEFAULT_DAYS * 48
+    assert (df["wind_mw"] == FUEL_BASE_MW["WIND"]).all()
+    assert str(df["fuel_event_time_utc"].dt.tz) == "UTC"
+
+
+def test_model_fuel_only_requested_types(store):
+    df = store.model_fuel(["WIND"])
+
+    assert list(df.columns) == ["fuel_event_time_utc", "fuel_published_at_utc", "wind_mw"]
+
+
+def test_model_margin_history(store):
+    df = store.model_margin_history()
+
+    assert list(df.columns) == [
+        "event_time_utc", "published_at_utc", "forecast_horizon_hours", "derated_margin_mw",
+    ]
+    assert len(df) == DEFAULT_DAYS * 48 - 1
+    assert (df["forecast_horizon_hours"] == 1).all()
+    assert df["published_at_utc"].is_monotonic_increasing
 
 
 # --- Freshness and counts --------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("dataset", "event_column", "freshness_column"),
+    [
+        ("elexon_margin_lolpdrm", "event_time_utc", "published_at_utc"),
+        ("elexon_demand_indo", "event_time_utc", "published_at_utc"),
+        ("elexon_generation_fuelhh", "event_time_utc", "published_at_utc"),
+        ("elexon_generation_fuelinst", "event_time_utc", "published_at_utc"),
+    ],
+)
+def test_latest_times(store, grid_db, dataset, event_column, freshness_column):
+    expected = tuple(
+        pd.Timestamp(_scalar(grid_db, f'SELECT MAX("{column}") FROM "{dataset}"'))
+        for column in (event_column, freshness_column)
+    )
+
+    assert store.latest_times(dataset) == expected
+    assert all(str(time.tz) == "UTC" for time in store.latest_times(dataset))
+
+
+def test_latest_times_for_neso_generation_mix_use_interval_start(tmp_path):
+    store = SQLiteStore(tmp_path / "grid.db")
+    store.initialise()
+    store.upsert_neso_generation_mix(ROWS["neso_generation_mix"])
+
+    # No publication time, so freshness falls back to the interval start.
+    assert store.latest_times("neso_generation_mix") == (pd.Timestamp(TIME), pd.Timestamp(TIME))
+
+
+def test_latest_times_when_missing_empty_or_without_time_columns(tmp_path, grid_db, empty_grid_db):
+    assert SQLiteStore(tmp_path / "missing.db").latest_times("elexon_demand_indo") == (None, None)
+    assert SQLiteStore(empty_grid_db).latest_times("elexon_demand_indo") == (None, None)
+    assert SQLiteStore(empty_grid_db).latest_times("model_dataset") == (None, None)
+    # neso_demand_update keys on settlement date and period, not a timestamp.
+    assert SQLiteStore(grid_db).latest_times("neso_demand_update") == (None, None)
 
 
 @pytest.mark.parametrize(
@@ -169,46 +299,13 @@ def test_model_fuel_matches_build_dataset(store, grid_db):
     ["elexon_margin_lolpdrm", "elexon_demand_indo", "elexon_generation_fuelhh",
      "elexon_generation_fuelinst", "neso_generation_mix", "neso_demand_update"],
 )
-def test_latest_times_match_refresh(store, grid_db, dataset):
-    with sqlite3.connect(grid_db) as conn:
-        expected = (
-            refresh.max_timestamp(conn, dataset, ("event_time_utc", "interval_start_utc", "start_time_utc")),
-            refresh.max_timestamp(
-                conn, dataset,
-                ("published_at_utc", "event_time_utc", "interval_start_utc", "start_time_utc"),
-            ),
-        )
-
-    assert store.latest_times(dataset) == expected
+def test_row_count(store, grid_db, dataset):
+    assert store.row_count(dataset) == _scalar(grid_db, f'SELECT COUNT(*) FROM "{dataset}"')
 
 
-def test_latest_times_when_missing_or_empty(tmp_path, empty_grid_db):
-    assert SQLiteStore(tmp_path / "missing.db").latest_times("elexon_demand_indo") == (None, None)
-    assert SQLiteStore(empty_grid_db).latest_times("elexon_demand_indo") == (None, None)
-    assert SQLiteStore(empty_grid_db).latest_times("model_dataset") == (None, None)
-
-
-@pytest.mark.parametrize(
-    ("dataset", "count_function"),
-    [
-        ("elexon_margin_lolpdrm", "count_margin_lolpdrm_rows"),
-        ("elexon_demand_indo", "count_demand_indo_rows"),
-        ("elexon_generation_fuelhh", "count_generation_fuelhh_rows"),
-        ("elexon_generation_fuelinst", "count_generation_fuelinst_rows"),
-        ("neso_generation_mix", "count_neso_generation_mix_rows"),
-        ("neso_demand_update", "count_neso_demand_update_rows"),
-    ],
-)
-def test_row_counts_match_core_db(store, grid_db, monkeypatch, dataset, count_function):
-    monkeypatch.setattr(db, "DB_PATH", grid_db)
-
-    assert store.row_count(dataset) == getattr(db, count_function)()
-
-
-def test_target_row_count_matches_core_db(store, grid_db, monkeypatch):
-    monkeypatch.setattr(db, "DB_PATH", grid_db)
-
-    assert store.target_row_count() == db.count_target_rows()
+def test_target_row_count(store):
+    # Both 1-hour-ahead rows and the NULL one count; 8-hour ones don't.
+    assert store.target_row_count() == DEFAULT_DAYS * 48
 
 
 def test_counts_when_missing_or_without_tables(tmp_path):
@@ -227,9 +324,10 @@ def test_counts_when_missing_or_without_tables(tmp_path):
 
 ROWS = {
     "margin_lolpdrm": [{
-        "event_time_utc": TIME, "published_at_utc": TIME, "forecast_horizon_hours": 1,
-        "settlement_date": date(2026, 11, 20), "settlement_period": 21,
-        "derated_margin_mw": 5000.0, "loss_of_load_probability": 0.001, "source": "elexon",
+        "event_time_utc": TIME, "published_at_utc": TIME - timedelta(hours=1),
+        "forecast_horizon_hours": 1, "settlement_date": date(2026, 11, 20),
+        "settlement_period": 21, "derated_margin_mw": 5000.0,
+        "loss_of_load_probability": 0.001, "source": "elexon",
     }],
     "demand_indo": [{
         "event_time_utc": TIME, "published_at_utc": TIME,
@@ -247,7 +345,7 @@ ROWS = {
         "fuel_type": "INTFR", "generation_mw": 1500.0, "source": "elexon_fuelinst",
     }],
     "neso_generation_mix": [{
-        "interval_start_utc": TIME, "interval_end_utc": TIME,
+        "interval_start_utc": TIME, "interval_end_utc": TIME + timedelta(minutes=30),
         "biomass_pct": 5.0, "coal_pct": 0.0, "imports_pct": 10.0, "gas_pct": 30.0,
         "nuclear_pct": 15.0, "other_pct": 1.0, "hydro_pct": 1.0, "solar_pct": 8.0,
         "wind_pct": 30.0, "source": "neso_carbon_intensity",
@@ -260,45 +358,79 @@ ROWS = {
     }],
 }
 
-TABLES = {
-    "margin_lolpdrm": "elexon_margin_lolpdrm",
-    "demand_indo": "elexon_demand_indo",
-    "generation_fuelhh": "elexon_generation_fuelhh",
-    "generation_fuelinst": "elexon_generation_fuelinst",
-    "neso_generation_mix": "neso_generation_mix",
-    "neso_demand_update": "neso_demand_update",
+# What each row looks like in SQLite: datetimes and dates as ISO strings.
+STORED = {
+    "margin_lolpdrm": ("elexon_margin_lolpdrm", {
+        "event_time_utc": "2026-11-20T10:00:00+00:00",
+        "published_at_utc": "2026-11-20T09:00:00+00:00",
+        "forecast_horizon_hours": 1, "settlement_date": "2026-11-20",
+        "settlement_period": 21, "derated_margin_mw": 5000.0,
+        "loss_of_load_probability": 0.001, "source": "elexon",
+    }),
+    "demand_indo": ("elexon_demand_indo", {
+        "event_time_utc": "2026-11-20T10:00:00+00:00",
+        "published_at_utc": "2026-11-20T10:00:00+00:00",
+        "settlement_date": "2026-11-20", "settlement_period": 21,
+        "demand_mw": 30000.0, "source": "elexon",
+    }),
+    "generation_fuelhh": ("elexon_generation_fuelhh", {
+        "event_time_utc": "2026-11-20T10:00:00+00:00", "fuel_type": "WIND",
+        "settlement_date": "2026-11-20", "generation_mw": 8000.0,
+    }),
+    "generation_fuelinst": ("elexon_generation_fuelinst", {
+        "event_time_utc": "2026-11-20T10:00:00+00:00", "fuel_type": "INTFR",
+        "generation_mw": 1500.0, "source": "elexon_fuelinst",
+    }),
+    "neso_generation_mix": ("neso_generation_mix", {
+        "interval_start_utc": "2026-11-20T10:00:00+00:00",
+        "interval_end_utc": "2026-11-20T10:30:00+00:00",
+        "gas_pct": 30.0, "wind_pct": 30.0, "source": "neso_carbon_intensity",
+    }),
+    "neso_demand_update": ("neso_demand_update", {
+        "settlement_date": "2026-11-20", "settlement_period": 21,
+        "forecast_actual_indicator": "A", "embedded_wind_mw": 1200.0,
+        "embedded_solar_mw": 300.0, "pump_storage_pumping_mw": 0.0,
+    }),
 }
 
 
-def _table(path, table) -> pd.DataFrame:
+def _rows(path, table) -> list[dict]:
     with sqlite3.connect(path) as conn:
-        return pd.read_sql_query(f'SELECT * FROM "{table}" ORDER BY 1', conn)
+        conn.row_factory = sqlite3.Row
+        return [dict(row) for row in conn.execute(f'SELECT * FROM "{table}"')]
+
+
+@pytest.fixture
+def new_store(tmp_path):
+    store = SQLiteStore(tmp_path / "grid.db")
+    store.initialise()
+    return store
 
 
 @pytest.mark.parametrize("kind", list(ROWS))
-def test_upserts_write_what_core_db_writes(tmp_path, monkeypatch, kind):
-    old_path, new_path = tmp_path / "old.db", tmp_path / "new.db"
-    monkeypatch.setattr(db, "DB_PATH", old_path)
-    db.initialise_database()
-    getattr(db, f"upsert_{kind}_rows")(ROWS[kind])
+def test_upserts_store_rows_as_iso_strings(new_store, kind):
+    table, expected = STORED[kind]
 
-    store = SQLiteStore(new_path)
-    store.initialise()
-    getattr(store, f"upsert_{kind}")(ROWS[kind])
+    getattr(new_store, f"upsert_{kind}")(ROWS[kind])
 
-    assert_frame_equal(_table(new_path, TABLES[kind]), _table(old_path, TABLES[kind]))
-    assert len(_table(new_path, TABLES[kind])) == 1
+    (row,) = _rows(new_store.db_path, table)
+    assert {key: row[key] for key in expected} == expected
 
 
-def test_upserting_the_same_key_replaces_the_row(tmp_path):
-    store = SQLiteStore(tmp_path / "grid.db")
-    store.initialise()
+def test_upserting_the_same_key_replaces_the_row(new_store):
+    new_store.upsert_demand_indo(ROWS["demand_indo"])
+    new_store.upsert_demand_indo([{**ROWS["demand_indo"][0], "demand_mw": 31000.0}])
 
-    store.upsert_demand_indo(ROWS["demand_indo"])
-    store.upsert_demand_indo([{**ROWS["demand_indo"][0], "demand_mw": 31000.0}])
+    assert [row["demand_mw"] for row in _rows(new_store.db_path, "elexon_demand_indo")] == [31000.0]
 
-    table = _table(tmp_path / "grid.db", "elexon_demand_indo")
-    assert table["demand_mw"].tolist() == [31000.0]
+
+def test_upserts_read_back_through_the_store(new_store):
+    new_store.upsert_margin_lolpdrm(ROWS["margin_lolpdrm"])
+
+    df = new_store.recent_margin(1)
+
+    assert df["event_time_utc"].tolist() == [pd.Timestamp(TIME)]
+    assert df["derated_margin_mw"].tolist() == [5000.0]
 
 
 def test_initialise_creates_the_file_and_is_repeatable(tmp_path):
@@ -312,33 +444,32 @@ def test_initialise_creates_the_file_and_is_repeatable(tmp_path):
     assert store.row_count("elexon_demand_indo") == 0
 
 
-def test_save_model_dataset_matches_build_dataset(tmp_path, monkeypatch):
+def test_save_model_dataset(tmp_path):
     dataset = pd.DataFrame({
         "target_time_utc": pd.to_datetime(["2026-11-20T10:00Z", "2026-11-20T10:30Z"], utc=True),
         "forecast_origin_utc": pd.to_datetime(["2026-11-19T10:00Z", None], utc=True),
         "target_drm_mw": [5000.0, 5100.0],
     })
-    old_path, new_path = tmp_path / "old.db", tmp_path / "new.db"
-    monkeypatch.setattr(build_dataset, "DB_PATH", old_path)
-    build_dataset.save_dataset_to_db(dataset)
+    store = SQLiteStore(tmp_path / "grid.db")
 
-    SQLiteStore(new_path).save_model_dataset(dataset)
-    SQLiteStore(new_path).save_model_dataset(dataset)  # replaces, doesn't append
+    store.save_model_dataset(dataset)
+    store.save_model_dataset(dataset)  # replaces, doesn't append
 
-    assert_frame_equal(_table(new_path, "model_dataset"), _table(old_path, "model_dataset"))
-    assert len(_table(new_path, "model_dataset")) == 2
-    with sqlite3.connect(new_path) as conn:
-        indexes = {row[1] for row in conn.execute("PRAGMA index_list('model_dataset')")}
+    assert _rows(store.db_path, "model_dataset") == [
+        {"target_time_utc": "2026-11-20T10:00:00+00:00",
+         "forecast_origin_utc": "2026-11-19T10:00:00+00:00", "target_drm_mw": 5000.0},
+        {"target_time_utc": "2026-11-20T10:30:00+00:00",
+         "forecast_origin_utc": None, "target_drm_mw": 5100.0},
+    ]
+    indexes = {row[1] for row in _sql(store.db_path, "PRAGMA index_list('model_dataset')")}
     assert "idx_model_dataset_target_time" in indexes
 
 
-def test_failed_write_rolls_back(tmp_path):
-    store = SQLiteStore(tmp_path / "grid.db")
-    store.initialise()
+def test_failed_write_rolls_back(new_store):
     good = ROWS["demand_indo"][0]
     bad = {**good, "event_time_utc": TIME.replace(hour=11), "demand_mw": None}  # NOT NULL
 
     with pytest.raises(sqlite3.IntegrityError):
-        store.upsert_demand_indo([good, bad])
+        new_store.upsert_demand_indo([good, bad])
 
-    assert store.row_count("elexon_demand_indo") == 0
+    assert new_store.row_count("elexon_demand_indo") == 0

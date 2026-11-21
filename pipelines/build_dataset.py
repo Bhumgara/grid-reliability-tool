@@ -1,10 +1,8 @@
-import sqlite3
-
 import numpy as np
 import pandas as pd
 
 from core import config
-from core.config import DB_PATH
+from core.storage import GridStore, SQLiteStore
 
 from model.features import (
     add_calendar_features,
@@ -29,143 +27,6 @@ FUEL_TYPES = [
     "NUCLEAR",
     "BIOMASS",
 ]
-
-
-def load_targets(conn: sqlite3.Connection) -> pd.DataFrame:
-    query = TARGET_SQL_PATH.read_text()
-
-    df = pd.read_sql_query(query, conn)
-
-    df["target_time_utc"] = pd.to_datetime(
-        df["target_time_utc"],
-        utc=True,
-    )
-    df["target_published_at_utc"] = pd.to_datetime(
-        df["target_published_at_utc"],
-        utc=True,
-    )
-
-    return df
-
-
-def load_demand(conn: sqlite3.Connection) -> pd.DataFrame:
-    query = """
-        SELECT
-            event_time_utc,
-            published_at_utc,
-            demand_mw
-        FROM elexon_demand_indo
-        WHERE demand_mw IS NOT NULL
-        ORDER BY published_at_utc;
-    """
-
-    df = pd.read_sql_query(query, conn)
-
-    df["event_time_utc"] = pd.to_datetime(
-        df["event_time_utc"],
-        utc=True,
-    )
-    df["published_at_utc"] = pd.to_datetime(
-        df["published_at_utc"],
-        utc=True,
-    )
-
-    return df.rename(
-        columns={
-            "event_time_utc": "demand_event_time_utc",
-            "published_at_utc": "demand_published_at_utc",
-        }
-    )
-
-
-def load_fuelhh(conn: sqlite3.Connection) -> pd.DataFrame:
-    placeholders = ",".join("?" for _ in FUEL_TYPES)
-
-    query = f"""
-        SELECT
-            event_time_utc,
-            published_at_utc,
-            fuel_type,
-            generation_mw
-        FROM elexon_generation_fuelhh
-        WHERE fuel_type IN ({placeholders})
-        ORDER BY published_at_utc;
-    """
-
-    df = pd.read_sql_query(
-        query,
-        conn,
-        params=FUEL_TYPES,
-    )
-
-    df["event_time_utc"] = pd.to_datetime(
-        df["event_time_utc"],
-        utc=True,
-    )
-    df["published_at_utc"] = pd.to_datetime(
-        df["published_at_utc"],
-        utc=True,
-    )
-
-    wide = (
-        df.pivot_table(
-            index=[
-                "event_time_utc",
-                "published_at_utc",
-            ],
-            columns="fuel_type",
-            values="generation_mw",
-            aggfunc="last",
-        )
-        .reset_index()
-    )
-
-    wide.columns.name = None
-
-    wide = wide.rename(
-        columns={
-            "event_time_utc": "fuel_event_time_utc",
-            "published_at_utc": "fuel_published_at_utc",
-            "WIND": "wind_mw",
-            "CCGT": "ccgt_mw",
-            "NUCLEAR": "nuclear_mw",
-            "BIOMASS": "biomass_mw",
-        }
-    )
-
-    return wide
-
-def load_margin_history(
-    conn: sqlite3.Connection,
-) -> pd.DataFrame:
-    query = """
-        SELECT
-            event_time_utc,
-            published_at_utc,
-            forecast_horizon_hours,
-            derated_margin_mw
-        FROM elexon_margin_lolpdrm
-        WHERE forecast_horizon_hours = 1
-          AND derated_margin_mw IS NOT NULL
-        ORDER BY published_at_utc;
-    """
-
-    df = pd.read_sql_query(
-        query,
-        conn,
-    )
-
-    df["event_time_utc"] = pd.to_datetime(
-        df["event_time_utc"],
-        utc=True,
-    )
-
-    df["published_at_utc"] = pd.to_datetime(
-        df["published_at_utc"],
-        utc=True,
-    )
-
-    return df
 
 
 def add_baseline(
@@ -279,48 +140,22 @@ def validate_dataset(
                 f"Future event used in {column}."
             )
 
-def save_dataset_to_db(df: pd.DataFrame) -> None:
-    db_df = df.copy()
+def load_model_inputs(
+    store: GridStore,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """``(targets, demand, fuel, margin)`` from the store, as the model expects."""
+    return (
+        store.model_targets(),
+        store.model_demand(),
+        store.model_fuel(FUEL_TYPES),
+        store.model_margin_history(),
+    )
 
-    # SQLite has no native timezone-aware datetime type,
-    # so store datetimes consistently as ISO-8601 strings.
-    datetime_columns = [
-        column
-        for column in db_df.columns
-        if pd.api.types.is_datetime64_any_dtype(db_df[column])
-    ]
 
-    for column in datetime_columns:
-        db_df[column] = db_df[column].apply(
-            lambda value: (
-                value.isoformat()
-                if pd.notna(value)
-                else None
-            )
-        )
-
-    with sqlite3.connect(str(DB_PATH)) as conn:
-        db_df.to_sql(
-            "model_dataset",
-            conn,
-            if_exists="replace",
-            index=False,
-        )
-
-        conn.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS
-                idx_model_dataset_target_time
-            ON model_dataset (target_time_utc);
-            """
-        )
-
-def build_model_dataset() -> pd.DataFrame:
-    with sqlite3.connect(str(DB_PATH)) as conn:
-        targets = load_targets(conn)
-        demand = load_demand(conn)
-        fuel = load_fuelhh(conn)
-        margin = load_margin_history(conn)
+def build_model_dataset(store: GridStore | None = None) -> pd.DataFrame:
+    """Build the modelling dataset; ``store`` defaults to the SQLite database."""
+    store = store or SQLiteStore()
+    targets, demand, fuel, margin = load_model_inputs(store)
 
     df = targets.copy()
 
@@ -389,7 +224,7 @@ def build_model_dataset() -> pd.DataFrame:
         "target_time_utc"
     ).reset_index(drop=True)
 
-    save_dataset_to_db(df)
+    store.save_model_dataset(df)
 
     OUTPUT_PATH.parent.mkdir(
         parents=True,

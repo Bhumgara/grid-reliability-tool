@@ -7,8 +7,10 @@ import inspect
 import re
 import typing
 
+import pytest
+
 from core import db, queries
-from core.config import SCHEMA_PATH
+from core.config import PROJECT_ROOT, SCHEMA_PATH
 from core.storage import Dataset, GridStore
 from pipelines import build_dataset
 
@@ -28,12 +30,9 @@ QUERY_LOADERS = {
     "load_live_interconnectors": "live_interconnectors",
     "load_margin_history": "margin_history",
 }
-MODEL_LOADERS = {
-    "load_targets": "model_targets",
-    "load_demand": "model_demand",
-    "load_fuelhh": "model_fuel",
-    "load_margin_history": "model_margin_history",
-    "save_dataset_to_db": "save_model_dataset",
+MODEL_METHODS = {
+    "model_targets", "model_demand", "model_fuel", "model_margin_history",
+    "save_model_dataset",
 }
 
 
@@ -64,9 +63,23 @@ def test_every_database_loader_in_queries_has_a_method():
 
 
 def test_every_model_input_has_a_method():
-    for function, method in MODEL_LOADERS.items():
-        assert hasattr(build_dataset, function), function
-        assert method in METHODS, method
+    assert MODEL_METHODS <= METHODS
+
+
+@pytest.mark.parametrize(
+    "module",
+    ["core/db.py", "core/queries.py", "pipelines/build_dataset.py",
+     "pipelines/predict.py", "pipelines/refresh.py", "pipelines/ingest.py"],
+)
+def test_app_code_goes_through_the_store(module):
+    # Only core/storage/ talks to SQLite directly.
+    source = (PROJECT_ROOT / module).read_text(encoding="utf-8")
+
+    assert "sqlite3" not in source
+
+
+def test_build_dataset_loads_inputs_from_the_store():
+    assert hasattr(build_dataset, "load_model_inputs")
 
 
 def test_refresh_freshness_has_a_method():
