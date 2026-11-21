@@ -41,6 +41,7 @@ apply_styles()
 # freshness check immediately, then checks again every REFRESH_CHECK_SECONDS
 # (150 seconds, set in core/config.py); each check only fetches data that is
 # stale. Normal Streamlit reruns never call the external APIs directly.
+# Set GRID_DASHBOARD_REFRESH=0 when backend.worker does the refreshing instead.
 start_background_worker()
 
 st.title("UK Energy Reliability Tool")

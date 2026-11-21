@@ -145,7 +145,7 @@ Needs: 1.6
 - [x] Add a `--once` mode that refreshes once and exits, so a scheduler (cron, Cloud Scheduler with a Cloud Run job) can run it instead of the loop
 - [x] Have the worker call `ensure_deployment_data()` before its first refresh
 - [x] Have the worker record a `last_refresh_completed` timestamp the API can read
-- [ ] Put the Streamlit thread in `dashboard/bootstrap.py` behind an environment flag, so only one refresher runs
+- [x] Put the Streamlit thread in `dashboard/bootstrap.py` behind an environment flag, so only one refresher runs
 - [ ] Document running the API and the worker in `README.md`
 
 ### 2.4 `feature/change-detection`
