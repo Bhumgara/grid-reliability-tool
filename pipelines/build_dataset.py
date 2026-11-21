@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from core import config
-from core.storage import GridStore, SQLiteStore
+from core.storage import GridStore, SQLiteStore, get_file_store
 
 from model.features import (
     add_calendar_features,
@@ -17,9 +16,6 @@ from pipelines.helper import (
     report_dataset_diagnostics,
 )
 
-
-TARGET_SQL_PATH = config.MODEL_DATASET_SQL_PATH
-OUTPUT_PATH = config.MODEL_DATASET_PATH
 
 FUEL_TYPES = [
     "WIND",
@@ -226,15 +222,8 @@ def build_model_dataset(store: GridStore | None = None) -> pd.DataFrame:
 
     store.save_model_dataset(df)
 
-    OUTPUT_PATH.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    df.to_csv(
-        OUTPUT_PATH,
-        index=False,
-    )
+    files = get_file_store()
+    files.write_csv("model_dataset", df)
 
     print()
     print(f"Dataset rows: {len(df):,}")
@@ -271,7 +260,7 @@ def build_model_dataset(store: GridStore | None = None) -> pd.DataFrame:
     )
 
     print(
-        f"Saved to {OUTPUT_PATH}"
+        f"Saved to {files.location('model_dataset')}"
     )
 
     return df

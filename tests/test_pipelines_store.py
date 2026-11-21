@@ -25,8 +25,8 @@ def store(grid_db):
 @pytest.fixture(autouse=True)
 def outputs_in_tmp(tmp_path, monkeypatch):
     """Keep the CSV and forecast files out of the real data folder."""
-    monkeypatch.setattr(build_dataset, "OUTPUT_PATH", tmp_path / "model_dataset.csv")
-    monkeypatch.setattr(predict, "OUTPUT_PATH", tmp_path / "latest_forecast.json")
+    monkeypatch.setattr("core.config.MODEL_DATASET_PATH", tmp_path / "model_dataset.csv")
+    monkeypatch.setattr("core.config.FORECAST_PATH", tmp_path / "latest_forecast.json")
 
 
 def test_build_model_dataset_saves_to_the_store(store, tmp_path):

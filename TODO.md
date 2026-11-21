@@ -176,7 +176,7 @@ for Postgres, BigQuery or object storage without touching the API or worker.
 - [x] Add the SQLite implementation (`SQLiteStore`), with tests that it matches the current code
 - [x] Route `core/queries.py` through it
 - [x] Route `pipelines/` and `core/db.py` through it
-- [ ] Put the JSON and CSV outputs (forecast, refresh status, validation) behind a file-store interface: a local folder now, object storage (e.g. Cloud Storage) later
+- [x] Put the JSON and CSV outputs (forecast, refresh status, validation) behind a file-store interface: a local folder now, object storage (e.g. Cloud Storage) later
 - [ ] Choose the backends with environment variables (default SQLite and the local folder)
 - [ ] Add contract tests that every backend must pass, run against SQLite
 

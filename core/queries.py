@@ -6,7 +6,9 @@ dependency. Callers add their own caching (st.cache_data in the Streamlit app,
 a TTL cache in the API).
 
 The database loaders delegate to the storage backend (``core.storage``;
-SQLite today), so the SQL lives in one place. The JSON/CSV loaders read files.
+SQLite today), so the SQL lives in one place. The forecast, status and
+validation loaders go through the file store (local files today). Model
+metrics are read straight from ``artifacts/``, which ships with the code.
 
 Every loader accepts an optional path (``db_path`` for database queries, a
 file path for the JSON/CSV loaders) so tests can point it at fixtures. When
@@ -21,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 
 from core import config
-from core.storage import SQLiteStore
+from core.storage import LocalFileStore, SQLiteStore, get_file_store
 
 # Defined with the storage interface; re-exported here for existing callers.
 from core.storage.base import DatabaseUnavailableError  # noqa: F401
@@ -99,37 +101,23 @@ def load_model_metrics(
         return json.load(file)
 
 
-def _read_json_or_none(path: Path) -> dict | None:
-    """
-    Read a JSON file the refresh worker may be rewriting.
-
-    Returns None if the file is missing, unreadable or half-written.
-    """
-    if not path.exists():
-        return None
-
-    try:
-        with path.open(encoding="utf-8") as file:
-            return json.load(file)
-    except (
-        OSError,
-        json.JSONDecodeError,
-    ):
-        return None
+def _files(key: str, path: Path | None):
+    """The file store, with ``path`` (if given) used for ``key``."""
+    return LocalFileStore({key: path}) if path is not None else get_file_store()
 
 
 def load_latest_forecast(
     path: Path | None = None,
 ) -> dict | None:
     """Latest 24-hour-ahead forecast, or None if unavailable."""
-    return _read_json_or_none(path or config.FORECAST_PATH)
+    return _files("forecast", path).read_json("forecast")
 
 
 def load_refresh_status(
     path: Path | None = None,
 ) -> dict:
     """Live refresh status, or ``{}`` if unavailable."""
-    return _read_json_or_none(path or config.STATUS_PATH) or {}
+    return _files("refresh_status", path).read_json("refresh_status") or {}
 
 
 def load_last_refresh_completed(
@@ -139,7 +127,7 @@ def load_last_refresh_completed(
     When the refresh worker last finished a check (UTC), or None if it hasn't
     yet, or the file is unreadable.
     """
-    record = _read_json_or_none(path or config.LAST_REFRESH_PATH)
+    record = _files("last_refresh", path).read_json("last_refresh")
 
     if not isinstance(record, dict):
         return None
@@ -167,19 +155,18 @@ def load_validation_predictions(
     Uses validation predictions, falling back to test predictions. Returns an
     empty frame if neither exists.
     """
-    validation_path = validation_path or config.VALIDATION_PATH
-    test_path = test_path or config.TEST_PATH
+    paths = {}
+    if validation_path is not None:
+        paths["validation_predictions"] = validation_path
+    if test_path is not None:
+        paths["test_predictions"] = test_path
+    files = LocalFileStore(paths) if paths else get_file_store()
 
-    path = (
-        validation_path
-        if validation_path.exists()
-        else test_path
-    )
-
-    if not path.exists():
+    df = files.read_csv("validation_predictions")
+    if df is None:
+        df = files.read_csv("test_predictions")
+    if df is None:
         return pd.DataFrame()
-
-    df = pd.read_csv(path)
 
     if "target_time_utc" in df.columns:
         df["target_time_utc"] = pd.to_datetime(

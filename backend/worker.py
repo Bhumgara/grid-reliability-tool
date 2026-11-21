@@ -30,7 +30,6 @@ state is "failed".
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import signal
 import sys
@@ -40,6 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from core import config, deployment
+from core.storage import LocalFileStore, get_file_store
 
 logger = logging.getLogger("backend.worker")
 
@@ -77,21 +77,14 @@ def record_refresh_completed(
     path: Path | None = None,
 ) -> None:
     """
-    Write ``completed`` to ``LAST_REFRESH_PATH`` (read by
-    ``core.queries.load_last_refresh_completed``).
+    Save ``completed`` as the ``last_refresh`` file (read by
+    ``core.queries.load_last_refresh_completed``). ``path`` overrides where.
 
-    Written to a temporary file and then renamed, so readers never see a
-    half-written file.
+    The file store replaces the file in one step, so readers never see a
+    half-written one.
     """
-    path = path or config.LAST_REFRESH_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(
-        json.dumps({"last_refresh_completed_utc": completed.isoformat()}) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(path)
+    files = LocalFileStore({"last_refresh": path}) if path is not None else get_file_store()
+    files.write_json("last_refresh", {"last_refresh_completed_utc": completed.isoformat()})
 
 
 def _utc_now() -> datetime:

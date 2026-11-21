@@ -21,8 +21,7 @@ from typing import Callable
 
 import pandas as pd
 
-from core import config
-from core.storage import GridStore, SQLiteStore
+from core.storage import GridStore, SQLiteStore, get_file_store
 from pipelines.ingest import (
     backfill_fuelhh,
     backfill_indo,
@@ -33,9 +32,6 @@ from pipelines.ingest import (
 )
 from pipelines.predict import run_prediction
 
-
-STATUS_PATH = config.STATUS_PATH
-FORECAST_PATH = config.FORECAST_PATH
 
 STALE_AFTER = pd.Timedelta(minutes=45)
 OVERLAP = pd.Timedelta(hours=2)
@@ -156,33 +152,19 @@ def inspect_sources(
 
 
 def forecast_generated_at() -> pd.Timestamp | None:
-    if not FORECAST_PATH.exists():
+    payload = get_file_store().read_json("forecast")
+
+    if not isinstance(payload, dict) or not payload.get("generated_at_utc"):
         return None
 
     try:
-        with FORECAST_PATH.open(encoding="utf-8") as file:
-            payload = json.load(file)
-
-        value = payload.get("generated_at_utc")
-        if not value:
-            return None
-
-        ts = pd.Timestamp(value)
-
-        if ts.tzinfo is None:
-            ts = ts.tz_localize("UTC")
-        else:
-            ts = ts.tz_convert("UTC")
-
-        return ts
-
-    except (
-        OSError,
-        json.JSONDecodeError,
-        ValueError,
-        TypeError,
-    ):
+        ts = pd.Timestamp(payload["generated_at_utc"])
+    except (ValueError, TypeError):
         return None
+
+    if ts.tzinfo is None:
+        return ts.tz_localize("UTC")
+    return ts.tz_convert("UTC")
 
 
 def forecast_is_stale(
@@ -213,31 +195,12 @@ def needs_refresh(
 
 
 def read_status() -> dict:
-    if not STATUS_PATH.exists():
-        return {}
-
-    try:
-        with STATUS_PATH.open(encoding="utf-8") as file:
-            return json.load(file)
-    except (
-        OSError,
-        json.JSONDecodeError,
-    ):
-        return {}
+    status = get_file_store().read_json("refresh_status")
+    return status if isinstance(status, dict) else {}
 
 
 def write_status(payload: dict) -> None:
-    STATUS_PATH.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    temporary = STATUS_PATH.with_suffix(".tmp")
-
-    with temporary.open("w", encoding="utf-8") as file:
-        json.dump(payload, file, indent=2)
-
-    temporary.replace(STATUS_PATH)
+    get_file_store().write_json("refresh_status", payload)
 
 
 def refresh_window(
