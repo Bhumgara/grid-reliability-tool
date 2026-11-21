@@ -155,3 +155,85 @@ def test_dashboard_wrapper_treats_missing_secrets_file_as_no_url(monkeypatch, tm
     monkeypatch.chdir(tmp_path)
 
     assert bootstrap._secret_bundle_url() is None
+
+
+# --- Data folder outside the repo (GRID_DATA_DIR) --------------------------------
+
+
+def test_data_entries_go_to_the_database_folder(tmp_path, downloads):
+    root = tmp_path / "repo"
+    root.mkdir()
+    volume = tmp_path / "volume"
+    db = volume / "grid.db"
+    _, serve = downloads
+    serve(_zip_bytes({
+        "data/grid.db": b"sqlite",
+        "data/processed/latest_forecast.json": b"{}",
+        "data/raw/elexon/x.json": b"[]",
+        "README.txt": b"top-level file",
+        "extras/notes.md": b"top-level folder",
+    }))
+
+    assert ensure_deployment_data(URL, db_path=db, project_root=root) is True
+
+    assert db.read_bytes() == b"sqlite"
+    assert (volume / "processed" / "latest_forecast.json").read_bytes() == b"{}"
+    assert (volume / "raw" / "elexon" / "x.json").read_bytes() == b"[]"
+    assert not (root / "data").exists()
+    # Entries outside data/ still go to the repo root.
+    assert (root / "README.txt").read_bytes() == b"top-level file"
+    assert (root / "extras" / "notes.md").read_bytes() == b"top-level folder"
+
+
+def test_existing_data_files_are_replaced(tmp_path, downloads):
+    root = tmp_path / "repo"
+    volume = tmp_path / "volume"
+    (volume / "processed").mkdir(parents=True)
+    (volume / "processed" / "latest_forecast.json").write_bytes(b"old")
+    _, serve = downloads
+    serve(_zip_bytes({
+        "data/grid.db": b"sqlite",
+        "data/processed/latest_forecast.json": b"new",
+    }))
+
+    ensure_deployment_data(URL, db_path=volume / "grid.db", project_root=root)
+
+    assert (volume / "processed" / "latest_forecast.json").read_bytes() == b"new"
+
+
+def test_copies_when_files_cannot_be_moved(tmp_path, downloads, monkeypatch):
+    # A mounted volume on another filesystem can't take os.replace.
+    root = tmp_path / "repo"
+    volume = tmp_path / "volume"
+    _, serve = downloads
+    serve(_zip_bytes({"data/grid.db": b"sqlite"}))
+
+    def cross_device(source, destination):
+        raise OSError("Invalid cross-device link")
+
+    monkeypatch.setattr(deployment.os, "replace", cross_device)
+
+    ensure_deployment_data(URL, db_path=volume / "grid.db", project_root=root)
+
+    assert (volume / "grid.db").read_bytes() == b"sqlite"
+
+
+def test_bundle_entries_cannot_escape(tmp_path, downloads):
+    root = tmp_path / "sandbox" / "repo"
+    root.mkdir(parents=True)
+    volume = tmp_path / "sandbox" / "volume"
+    _, serve = downloads
+    serve(_zip_bytes({
+        "data/grid.db": b"sqlite",
+        "../escaped.txt": b"bad",
+        "data/../../escaped2.txt": b"bad",
+    }))
+
+    ensure_deployment_data(URL, db_path=volume / "grid.db", project_root=root)
+
+    assert not (tmp_path / "escaped.txt").exists()
+    assert not (tmp_path / "sandbox" / "escaped.txt").exists()
+    assert not (tmp_path / "escaped2.txt").exists()
+    assert not (tmp_path / "sandbox" / "escaped2.txt").exists()
+    written = {p for p in tmp_path.rglob("*") if p.is_file()}
+    assert all(root in p.parents or volume in p.parents for p in written)
