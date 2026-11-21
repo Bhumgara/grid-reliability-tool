@@ -1,0 +1,52 @@
+# Local development: the API and the refresh worker, sharing one data volume.
+#
+#   cp .env.example .env        # set DEPLOYMENT_BUNDLE_URL (and GRID_CORS_ORIGINS)
+#   docker compose up --build   # API on http://localhost:8000
+#
+# Needs Docker Compose 2.24 or later (for the optional env_file).
+
+name: grid-reliability
+
+# Shared by both services: same image, settings and data volume.
+x-backend: &backend
+  build: .
+  image: grid-reliability:dev
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    # Set here, not in .env: .env.example has GRID_DATA_DIR blank, which
+    # would otherwise point the data at /app/data inside the container.
+    GRID_DATA_DIR: /data
+  volumes:
+    - grid-data:/data
+  restart: unless-stopped
+
+services:
+  worker:
+    <<: *backend
+    # Downloads the deployment bundle into the volume on first run, then
+    # refreshes every 150 seconds. If it can't get the data (e.g. no
+    # DEPLOYMENT_BUNDLE_URL), it exits and Docker restarts it with a growing
+    # delay; see `docker compose logs worker`.
+    command: ["python", "-m", "backend.worker"]
+
+  api:
+    <<: *backend
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      - worker
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  grid-data:

@@ -1,10 +1,24 @@
+import os
 from pathlib import Path
 
 # core/config.py -> core -> repo root. Paths below are absolute so they point at
 # the same files whichever directory a process (dashboard, API, worker) starts in.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-DATA_DIR = PROJECT_ROOT / "data"
+# The data folder (database, raw API responses, processed outputs). Set
+# GRID_DATA_DIR to keep it elsewhere, e.g. on a container volume. Relative
+# paths are taken from the current directory. Read once, at import.
+DATA_DIR_ENV = "GRID_DATA_DIR"
+
+
+def _data_dir() -> Path:
+    value = os.environ.get(DATA_DIR_ENV, "").strip()
+    if not value:
+        return PROJECT_ROOT / "data"
+    return Path(value).expanduser().resolve()
+
+
+DATA_DIR = _data_dir()
 RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"

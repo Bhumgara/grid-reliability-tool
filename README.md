@@ -22,14 +22,18 @@ Python · SQL · pandas · scikit-learn · Streamlit
 Install the dependencies (Python 3.13), from the repository root:
 
 ```bash
-pip install -r requirements.txt       # app, API and worker
+pip install -r requirements.txt       # dashboard, API and worker
 pip install -r requirements-dev.txt   # also tests and model plots
 ```
+
+`requirements-backend.txt` holds just the API and worker dependencies (what the
+container image installs); `requirements.txt` adds the Streamlit dashboard.
 
 The app reads its data from `data/grid.db`. If that file is missing, it is
 downloaded on first run from the zip bundle at `DEPLOYMENT_BUNDLE_URL` (see
 `.env.example`). The Streamlit dashboard can read the URL from the
-`deployment_bundle_url` secret instead.
+`deployment_bundle_url` secret instead. Set `GRID_DATA_DIR` to keep the data
+folder somewhere other than the repository's `data/`.
 
 Run the Streamlit dashboard:
 
@@ -99,6 +103,60 @@ python -m backend.export_openapi     # rewrite backend/openapi.json after API ch
 
 `backend/openapi.json` is committed; a test fails if it no longer matches the
 API.
+
+## Running with Docker
+
+One image, built from the [`Dockerfile`](./Dockerfile), runs either the API
+(the default command) or the refresh worker. It holds the code, the SQL and the
+trained model; all data lives on a volume mounted at `/data`. The Streamlit
+dashboard isn't containerised.
+
+### Docker Compose (local development)
+
+[`compose.yaml`](./compose.yaml) runs the API and the worker together, sharing a
+named volume. It needs Docker Compose 2.24 or later.
+
+```bash
+cp .env.example .env          # set DEPLOYMENT_BUNDLE_URL (and GRID_CORS_ORIGINS if needed)
+docker compose up --build     # API on http://localhost:8000
+docker compose logs -f worker # watch the refresh checks
+docker compose down           # stop (keeps the data volume)
+docker compose down -v        # stop and delete the data volume
+```
+
+- On first start the worker downloads the deployment bundle into the volume.
+  Until it has, the API's data endpoints return `503`. If the worker can't get
+  the data (e.g. no `DEPLOYMENT_BUNDLE_URL`), it exits and Docker restarts it
+  with a growing delay; its logs say why.
+- The data is in the `grid-reliability_grid-data` Docker volume (Compose adds
+  the project name), not the repository's `data/` folder. It is separate from
+  the `grid-data` volume in the `docker run` example below.
+- Set `API_PORT` to use a host port other than 8000.
+- After code changes, rebuild with `docker compose up --build`.
+
+### Running the image directly
+
+```bash
+docker build -t grid-reliability .
+docker volume create grid-data
+
+# Worker: keeps the data in the volume up to date
+docker run -d --name grid-worker -v grid-data:/data \
+  -e DEPLOYMENT_BUNDLE_URL=https://... \
+  grid-reliability python -m backend.worker
+
+# API
+docker run -d --name grid-api -p 8000:8000 -v grid-data:/data grid-reliability
+```
+
+- For a scheduler instead of a long-running worker, run
+  `docker run --rm -v grid-data:/data -e DEPLOYMENT_BUNDLE_URL=... grid-reliability python -m backend.worker --once`
+  on each tick. It exits with code 1 if the check failed.
+- The API listens on `$PORT` (default 8000); hosts such as Cloud Run set it.
+- `GRID_DATA_DIR` is `/data` in the image. Pass `GRID_CORS_ORIGINS` with
+  `-e` for a browser build.
+- The container runs as an unprivileged user (`grid`, uid 10001) that owns
+  `/data`.
 
 ## Repository
 

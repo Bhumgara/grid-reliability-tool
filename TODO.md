@@ -162,10 +162,10 @@ Needs: 2.2, 2.3. Lets clients poll cheaply (see Decisions).
 Needs: 2.1, 2.3. One image runs the API or the worker, so every host (local,
 Compute Engine, Cloud Run, on-premise) runs the same thing.
 
-- [ ] Make the data folder configurable with a `GRID_DATA_DIR` environment variable in `core/config.py` (default `<repo>/data`), with a test
-- [ ] Add a `Dockerfile` and `.dockerignore`; the API and the worker are separate commands on the same image
-- [ ] Add a `compose.yaml` for local development: API, worker and a shared data volume
-- [ ] Document building and running the containers in `README.md`
+- [x] Make the data folder configurable with a `GRID_DATA_DIR` environment variable in `core/config.py` (default `<repo>/data`), with a test
+- [x] Add a `Dockerfile` and `.dockerignore`; the API and the worker are separate commands on the same image
+- [x] Add a `compose.yaml` for local development: API, worker and a shared data volume
+- [x] Document building and running the containers in `README.md`
 
 ### 2.6 `refactor/storage-backends`
 
