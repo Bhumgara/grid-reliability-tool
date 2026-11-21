@@ -97,6 +97,9 @@ class Loaders:
     def load_refresh_status(self) -> dict:
         return self._cached(STATUS_TTL_SECONDS, queries.load_refresh_status)
 
+    def load_last_refresh_completed(self) -> pd.Timestamp | None:
+        return self._cached(STATUS_TTL_SECONDS, queries.load_last_refresh_completed)
+
     # --- Slow-changing ----------------------------------------------------
 
     def load_margin_history(self) -> pd.Series:

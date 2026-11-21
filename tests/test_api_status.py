@@ -16,6 +16,18 @@ def status_path(tmp_path, monkeypatch):
     return path
 
 
+@pytest.fixture(autouse=True)
+def last_refresh_path(tmp_path, monkeypatch):
+    """Point the worker's completion record at a temporary file (not created)."""
+    path = tmp_path / "last_refresh.json"
+    monkeypatch.setattr(config, "LAST_REFRESH_PATH", path)
+    return path
+
+
+def _record(path, when):
+    path.write_text(json.dumps({"last_refresh_completed_utc": when}), encoding="utf-8")
+
+
 @pytest.fixture
 def client():
     return TestClient(create_app())
@@ -28,6 +40,7 @@ def test_status_before_first_refresh(status_path, client):
     assert response.json() == {
         "state": "ok",
         "as_of_utc": None,
+        "last_refresh_completed_utc": None,
         "refresh_state": "starting",
         "message": (
             "Live refresh worker is starting; "
@@ -75,3 +88,64 @@ def test_status_is_in_openapi_schema(client):
 
     assert "/api/status" in schema["paths"]
     assert "StatusResponse" in schema["components"]["schemas"]
+
+
+# --- last_refresh_completed_utc --------------------------------------------------
+
+
+def test_last_refresh_falls_back_to_status_file(status_path, client):
+    status_path.write_text(json.dumps(DEGRADED), encoding="utf-8")
+
+    body = client.get("/api/status").json()
+
+    assert body["last_refresh_completed_utc"] == "2026-11-20T10:01:30Z"
+    assert body["as_of_utc"] == "2026-11-20T10:01:30Z"
+
+
+def test_worker_record_takes_priority(status_path, last_refresh_path, client):
+    status_path.write_text(json.dumps(DEGRADED), encoding="utf-8")
+    _record(last_refresh_path, "2026-11-20T10:04:00+00:00")
+
+    body = client.get("/api/status").json()
+
+    assert body["last_refresh_completed_utc"] == "2026-11-20T10:04:00Z"
+    assert body["as_of_utc"] == "2026-11-20T10:04:00Z"
+    # The status file's own time is still reported as it is.
+    assert body["completed_at_utc"] == "2026-11-20T10:01:30Z"
+
+
+def test_last_refresh_survives_a_refresh_in_progress(status_path, last_refresh_path, client):
+    # pipelines.refresh writes this while refreshing: no completion time.
+    status_path.write_text(
+        json.dumps({
+            "state": "refreshing",
+            "message": "Refreshing source data in the background.",
+            "started_at_utc": "2026-11-20T10:06:00+00:00",
+        }),
+        encoding="utf-8",
+    )
+    _record(last_refresh_path, "2026-11-20T10:04:00+00:00")
+
+    body = client.get("/api/status").json()
+
+    assert body["refresh_state"] == "refreshing"
+    assert body["completed_at_utc"] is None
+    assert body["last_refresh_completed_utc"] == "2026-11-20T10:04:00Z"
+
+
+def test_record_without_a_status_file(status_path, last_refresh_path, client):
+    _record(last_refresh_path, "2026-11-20T10:04:00+00:00")
+
+    body = client.get("/api/status").json()
+
+    assert body["refresh_state"] == "starting"
+    assert body["last_refresh_completed_utc"] == "2026-11-20T10:04:00Z"
+
+
+def test_unreadable_record_falls_back(status_path, last_refresh_path, client):
+    status_path.write_text(json.dumps(DEGRADED), encoding="utf-8")
+    last_refresh_path.write_text('{"last_refresh_comp', encoding="utf-8")
+
+    body = client.get("/api/status").json()
+
+    assert body["last_refresh_completed_utc"] == "2026-11-20T10:01:30Z"

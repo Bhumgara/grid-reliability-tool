@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
+from backend.api.etag import add_etag_middleware
 from backend.api.loaders import Loaders
 from backend.api.models import EmptyState, HealthResponse
 from backend.api.routes import demand, forecast, generation, grid, history, model, status
@@ -79,12 +80,21 @@ def create_app(
         body = EmptyState(state="unavailable", message=DATABASE_UNAVAILABLE_MESSAGE)
         return JSONResponse(status_code=503, content=body.model_dump())
 
+    # Middleware added later runs outside middleware added earlier. Order,
+    # outermost first: gzip, CORS, ETag. So 304s still get CORS headers, and
+    # the ETag is a hash of the uncompressed body.
+    add_etag_middleware(app, prefix=API_PREFIX)
+
     if cors_origins:
         # The API is read-only, so browsers only need GET (and the preflight).
+        # Web clients send If-None-Match and read ETag for cheap polling;
+        # browsers block both cross-origin unless they are listed here.
         app.add_middleware(
             CORSMiddleware,
             allow_origins=cors_origins,
             allow_methods=["GET"],
+            allow_headers=["If-None-Match"],
+            expose_headers=["ETag"],
         )
 
     # Compress large responses (e.g. model validation points) for clients
