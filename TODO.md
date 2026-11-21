@@ -152,7 +152,7 @@ Needs: 1.6
 
 Needs: 2.2, 2.3. Lets clients poll cheaply (see Decisions).
 
-- [ ] Include `last_refresh_completed` in `GET /api/status`, so a client can tell whether anything changed
+- [x] Include `last_refresh_completed` in `GET /api/status`, so a client can tell whether anything changed
 - [ ] Send an `ETag` on each data endpoint, built from the refresh timestamp, and return `304 Not Modified` when `If-None-Match` matches. Add both headers to the CORS config (`allow_headers` and `expose_headers`), or the web build can't use them
 - [ ] Add `Cache-Control` headers that match the refresh interval
 - [ ] Add tests: `304` while the data is unchanged, `200` with a new `ETag` after the refresh timestamp changes

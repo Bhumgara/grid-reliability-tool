@@ -137,6 +137,7 @@ def test_errors_are_not_cached(monkeypatch, clock):
         ("load_live_interconnectors", "load_live_interconnectors", LIVE_TTL_SECONDS),
         ("load_latest_forecast", "load_latest_forecast", FORECAST_TTL_SECONDS),
         ("load_refresh_status", "load_refresh_status", STATUS_TTL_SECONDS),
+        ("load_last_refresh_completed", "load_last_refresh_completed", STATUS_TTL_SECONDS),
         ("load_margin_history", "load_margin_history", SLOW_TTL_SECONDS),
         ("load_model_metrics", "load_model_metrics", SLOW_TTL_SECONDS),
         ("load_validation_predictions", "load_validation_predictions", SLOW_TTL_SECONDS),
