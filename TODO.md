@@ -115,66 +115,70 @@ the API and worker (Phase 2) can share it.
 
 Needs: 1.1
 
-- [ ] Add `fastapi`, `uvicorn` and `pydantic` to the requirements
-- [ ] Add `backend/api/main.py` with an app factory and `GET /api/health`
-- [ ] Configure CORS from an environment variable, and document it in `.env.example`
-- [ ] Add shared response models (timestamps, `EmptyState` with `state` and `message`)
-- [ ] Add an API test for health using `TestClient`
+- [x] Add `fastapi`, `uvicorn` and `pydantic` to the requirements
+- [x] Add `backend/api/main.py` with an app factory and `GET /api/health`
+- [x] Configure CORS from an environment variable, and document it in `.env.example`
+- [x] Add shared response models (timestamps, `EmptyState` with `state` and `message`)
+- [x] Add an API test for health using `TestClient`
 
 ### 2.2 `feature/api-endpoints`
 
 Needs: 1.2, 1.6, 2.1
 
-- [ ] `GET /api/status` (refresh status)
-- [ ] `GET /api/forecast/hero` (forecast, margin percentile, bridge steps)
-- [ ] `GET /api/grid/now` (current margin, demand and generation metrics)
-- [ ] `GET /api/history/margin` and `/api/history/demand` (`?days=`)
-- [ ] `GET /api/demand/typical-day`
-- [ ] `GET /api/generation/live`, `/api/generation/change` and `/api/interconnectors/live`
-- [ ] `GET /api/model/metrics` and `/api/model/validation`
-- [ ] Add a server-side TTL cache matching the current 45 s and 15 s TTLs
-- [ ] Add a script that exports the OpenAPI schema to `backend/openapi.json`
+- [x] `GET /api/status` (refresh status)
+- [x] `GET /api/forecast/hero` (forecast, margin percentile, bridge steps)
+- [x] Open the database read-only in `core/queries.py`, so a missing `grid.db` raises an error instead of creating an empty file (which would stop `ensure_deployment_data()` downloading the real one); the API returns `503` with an `unavailable` `EmptyState`
+- [x] `GET /api/grid/now` (current margin, demand and generation metrics)
+- [x] `GET /api/history/margin` and `/api/history/demand` (`?days=`)
+- [x] `GET /api/demand/typical-day`
+- [x] `GET /api/generation/live`, `/api/generation/change` and `/api/interconnectors/live`
+- [x] `GET /api/model/metrics` and `/api/model/validation`
+- [x] Add a server-side TTL cache matching the current 45 s and 15 s TTLs
+- [x] Compress responses with `GZipMiddleware` (the validation points can reach about 1.2 MB of JSON)
+- [x] Add a script that exports the OpenAPI schema to `backend/openapi.json`
 
 ### 2.3 `feature/refresh-worker`
 
 Needs: 1.6
 
-- [ ] Add `backend/worker.py`, a standalone loop that calls `refresh_live_data()` on the shared refresh interval from `core/config.py`
-- [ ] Add a `--once` mode that refreshes once and exits, so a scheduler (cron, Cloud Scheduler with a Cloud Run job) can run it instead of the loop
-- [ ] Have the worker call `ensure_deployment_data()` before its first refresh
-- [ ] Have the worker record a `last_refresh_completed` timestamp the API can read
-- [ ] Put the Streamlit thread in `dashboard/bootstrap.py` behind an environment flag, so only one refresher runs
-- [ ] Document running the API and the worker in `README.md`
+- [x] Add `backend/worker.py`, a standalone loop that calls `refresh_live_data()` on the shared refresh interval from `core/config.py`
+- [x] Add a `--once` mode that refreshes once and exits, so a scheduler (cron, Cloud Scheduler with a Cloud Run job) can run it instead of the loop
+- [x] Have the worker call `ensure_deployment_data()` before its first refresh
+- [x] Have the worker record a `last_refresh_completed` timestamp the API can read
+- [x] Put the Streamlit thread in `dashboard/bootstrap.py` behind an environment flag, so only one refresher runs
+- [x] Document running the API and the worker in `README.md`
 
 ### 2.4 `feature/change-detection`
 
 Needs: 2.2, 2.3. Lets clients poll cheaply (see Decisions).
 
-- [ ] Include `last_refresh_completed` in `GET /api/status`, so a client can tell whether anything changed
-- [ ] Send an `ETag` on each data endpoint, built from the refresh timestamp, and return `304 Not Modified` when `If-None-Match` matches
-- [ ] Add `Cache-Control` headers that match the refresh interval
-- [ ] Add tests: `304` while the data is unchanged, `200` with a new `ETag` after the refresh timestamp changes
+- [x] Include `last_refresh_completed` in `GET /api/status`, so a client can tell whether anything changed
+- [x] Send an `ETag` on each data endpoint, built from a hash of the response body (so it also changes on a model retrain or a format change, not only on a refresh), and return `304 Not Modified` when `If-None-Match` matches. Add both headers to the CORS config (`allow_headers` and `expose_headers`), or the web build can't use them
+- [x] Add `Cache-Control` headers: `no-cache` on success (always revalidate with the `ETag`; a `max-age` would let the browser answer a post-refresh refetch with old data), `no-store` on errors. The refresh interval sets the client's polling pace instead (4.2)
+- [x] Add tests: `304` while the data is unchanged, `200` with a new `ETag` after the refresh timestamp changes
 
 ### 2.5 `chore/containerise`
 
 Needs: 2.1, 2.3. One image runs the API or the worker, so every host (local,
 Compute Engine, Cloud Run, on-premise) runs the same thing.
 
-- [ ] Make the data folder configurable with a `GRID_DATA_DIR` environment variable in `core/config.py` (default `<repo>/data`), with a test
-- [ ] Add a `Dockerfile` and `.dockerignore`; the API and the worker are separate commands on the same image
-- [ ] Add a `compose.yaml` for local development: API, worker and a shared data volume
-- [ ] Document building and running the containers in `README.md`
+- [x] Make the data folder configurable with a `GRID_DATA_DIR` environment variable in `core/config.py` (default `<repo>/data`), with a test
+- [x] Add a `Dockerfile` and `.dockerignore`; the API and the worker are separate commands on the same image
+- [x] Add a `compose.yaml` for local development: API, worker and a shared data volume
+- [x] Document building and running the containers in `README.md`
 
 ### 2.6 `refactor/storage-backends`
 
 Needs: 2.2, 2.3. Puts storage behind interfaces so SQLite can later be swapped
 for Postgres, BigQuery or object storage without touching the API or worker.
 
-- [ ] Add a `GridStore` interface in `core/storage/` for the reads in `core/queries.py` and the writes in `pipelines/`
-- [ ] Add the SQLite implementation, wrapping the current code, and route `core/queries.py` and `pipelines/` through it
-- [ ] Put the JSON and CSV outputs (forecast, refresh status, validation) behind a file-store interface: a local folder now, object storage (e.g. Cloud Storage) later
-- [ ] Choose the backends with environment variables (default SQLite and the local folder)
-- [ ] Add contract tests that every backend must pass, run against SQLite
+- [x] Add a `GridStore` interface in `core/storage/` for the reads in `core/queries.py` and the writes in `pipelines/`
+- [x] Add the SQLite implementation (`SQLiteStore`), with tests that it matches the current code
+- [x] Route `core/queries.py` through it
+- [x] Route `pipelines/` and `core/db.py` through it
+- [x] Put the JSON and CSV outputs (forecast, refresh status, validation) behind a file-store interface: a local folder now, object storage (e.g. Cloud Storage) later
+- [x] Choose the backends with environment variables (default SQLite and the local folder)
+- [x] Add contract tests that every backend must pass, run against SQLite
 
 ---
 

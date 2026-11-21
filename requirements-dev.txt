@@ -2,6 +2,8 @@
 
 # Testing
 pytest==8.4.2
+# Needed by FastAPI's TestClient
+httpx2==2.16.2
 
 # Model training and evaluation plots (model/evaluate.py)
 matplotlib==3.10.6

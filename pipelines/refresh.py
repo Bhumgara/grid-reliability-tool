@@ -14,17 +14,14 @@ external source fails.
 from __future__ import annotations
 
 import json
-import sqlite3
 import threading
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Callable
 
 import pandas as pd
 
-from core import config
-from core.config import DB_PATH
+from core.storage import GridStore, get_file_store, get_grid_store
 from pipelines.ingest import (
     backfill_fuelhh,
     backfill_indo,
@@ -35,9 +32,6 @@ from pipelines.ingest import (
 )
 from pipelines.predict import run_prediction
 
-
-STATUS_PATH = config.STATUS_PATH
-FORECAST_PATH = config.FORECAST_PATH
 
 STALE_AFTER = pd.Timedelta(minutes=45)
 OVERLAP = pd.Timedelta(hours=2)
@@ -107,105 +101,19 @@ def api_time(value: pd.Timestamp) -> str:
     return value.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def table_exists(conn: sqlite3.Connection, table: str) -> bool:
-    row = conn.execute(
-        """
-        SELECT 1
-        FROM sqlite_master
-        WHERE type = 'table'
-          AND name = ?
-        LIMIT 1;
-        """,
-        (table,),
-    ).fetchone()
-
-    return row is not None
-
-
-def table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    if not table_exists(conn, table):
-        return set()
-
-    rows = conn.execute(
-        f'PRAGMA table_info("{table}")'
-    ).fetchall()
-
-    return {row[1] for row in rows}
-
-
-def max_timestamp(
-    conn: sqlite3.Connection,
-    table: str,
-    candidates: tuple[str, ...],
-) -> pd.Timestamp | None:
-    columns = table_columns(conn, table)
-
-    column = next(
-        (
-            candidate
-            for candidate in candidates
-            if candidate in columns
-        ),
-        None,
-    )
-
-    if column is None:
-        return None
-
-    value = conn.execute(
-        f'SELECT MAX("{column}") FROM "{table}"'
-    ).fetchone()[0]
-
-    if value is None:
-        return None
-
-    ts = pd.Timestamp(value)
-
-    if ts.tzinfo is None:
-        ts = ts.tz_localize("UTC")
-    else:
-        ts = ts.tz_convert("UTC")
-
-    return ts
-
-
 def source_state(
     spec: SourceSpec,
     now: pd.Timestamp | None = None,
+    store: GridStore | None = None,
 ) -> dict:
+    """
+    Freshness of one source. A missing database or table counts as stale
+    (``latest_times`` returns ``(None, None)``).
+    """
     now = now if now is not None else utc_now()
+    store = store or get_grid_store()
 
-    if not Path(DB_PATH).exists():
-        return {
-            "name": spec.name,
-            "required": spec.required,
-            "latest_event_utc": None,
-            "latest_freshness_utc": None,
-            "age_minutes": None,
-            "stale": True,
-        }
-
-    with sqlite3.connect(str(DB_PATH)) as conn:
-        latest_event = max_timestamp(
-            conn,
-            spec.table,
-            (
-                "event_time_utc",
-                "interval_start_utc",
-                "start_time_utc",
-            ),
-        )
-
-        latest_freshness = max_timestamp(
-            conn,
-            spec.table,
-            (
-                "published_at_utc",
-                "event_time_utc",
-                "interval_start_utc",
-                "start_time_utc",
-            ),
-        )
+    latest_event, latest_freshness = store.latest_times(spec.table)
 
     if latest_freshness is None:
         age_minutes = None
@@ -244,33 +152,19 @@ def inspect_sources(
 
 
 def forecast_generated_at() -> pd.Timestamp | None:
-    if not FORECAST_PATH.exists():
+    payload = get_file_store().read_json("forecast")
+
+    if not isinstance(payload, dict) or not payload.get("generated_at_utc"):
         return None
 
     try:
-        with FORECAST_PATH.open(encoding="utf-8") as file:
-            payload = json.load(file)
-
-        value = payload.get("generated_at_utc")
-        if not value:
-            return None
-
-        ts = pd.Timestamp(value)
-
-        if ts.tzinfo is None:
-            ts = ts.tz_localize("UTC")
-        else:
-            ts = ts.tz_convert("UTC")
-
-        return ts
-
-    except (
-        OSError,
-        json.JSONDecodeError,
-        ValueError,
-        TypeError,
-    ):
+        ts = pd.Timestamp(payload["generated_at_utc"])
+    except (ValueError, TypeError):
         return None
+
+    if ts.tzinfo is None:
+        return ts.tz_localize("UTC")
+    return ts.tz_convert("UTC")
 
 
 def forecast_is_stale(
@@ -301,31 +195,12 @@ def needs_refresh(
 
 
 def read_status() -> dict:
-    if not STATUS_PATH.exists():
-        return {}
-
-    try:
-        with STATUS_PATH.open(encoding="utf-8") as file:
-            return json.load(file)
-    except (
-        OSError,
-        json.JSONDecodeError,
-    ):
-        return {}
+    status = get_file_store().read_json("refresh_status")
+    return status if isinstance(status, dict) else {}
 
 
 def write_status(payload: dict) -> None:
-    STATUS_PATH.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    temporary = STATUS_PATH.with_suffix(".tmp")
-
-    with temporary.open("w", encoding="utf-8") as file:
-        json.dump(payload, file, indent=2)
-
-    temporary.replace(STATUS_PATH)
+    get_file_store().write_json("refresh_status", payload)
 
 
 def refresh_window(

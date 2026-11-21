@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from core import queries
+from core.storage import SQLiteStore
 from tests.fixtures.grid_db import (
     DEFAULT_DAYS,
     FIXTURE_END,
@@ -106,17 +107,17 @@ def test_margin_history_excludes_nulls_and_other_horizons(grid_db):
     assert history.notna().all()
 
 
-@pytest.mark.parametrize(
-    "loader",
-    [
-        queries.load_recent_margin,
-        queries.load_recent_demand,
-        queries.load_recent_generation,
-        queries.load_live_generation_mix,
-        queries.load_live_interconnectors,
-        queries.load_margin_history,
-    ],
-)
+DATABASE_LOADERS = [
+    queries.load_recent_margin,
+    queries.load_recent_demand,
+    queries.load_recent_generation,
+    queries.load_live_generation_mix,
+    queries.load_live_interconnectors,
+    queries.load_margin_history,
+]
+
+
+@pytest.mark.parametrize("loader", DATABASE_LOADERS)
 def test_database_loaders_return_empty_on_empty_db(loader, empty_grid_db):
     assert len(loader(db_path=empty_grid_db)) == 0
 
@@ -125,6 +126,32 @@ def test_loaders_default_to_config_db_path(grid_db, monkeypatch):
     monkeypatch.setattr("core.config.DB_PATH", grid_db)
 
     assert len(queries.load_recent_demand(7)) == WEEK
+
+
+@pytest.mark.parametrize("loader", DATABASE_LOADERS)
+def test_missing_database_raises_and_is_not_created(loader, tmp_path):
+    missing = tmp_path / "grid.db"
+
+    with pytest.raises(queries.DatabaseUnavailableError, match="Database not found"):
+        loader(db_path=missing)
+
+    assert not missing.exists()
+
+
+def test_database_is_opened_read_only(grid_db):
+    with SQLiteStore(grid_db)._read() as conn:
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            conn.execute("DELETE FROM elexon_demand_indo")
+
+    assert len(queries.load_recent_demand(7, db_path=grid_db)) == WEEK
+
+
+def test_database_path_with_spaces(grid_db, tmp_path):
+    spaced = tmp_path / "folder with spaces" / "grid #1.db"
+    spaced.parent.mkdir()
+    spaced.write_bytes(grid_db.read_bytes())
+
+    assert len(queries.load_recent_demand(7, db_path=spaced)) == WEEK
 
 
 # --- File loaders -----------------------------------------------------------
@@ -173,3 +200,43 @@ def test_validation_predictions_prefers_validation_then_test(tmp_path):
     df = queries.load_validation_predictions(validation, test)
     assert df["actual"].tolist() == [1]
     assert str(df["target_time_utc"].dt.tz) == "UTC"
+
+
+# --- Last refresh completed ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ('{"last_refresh_completed_utc": "2026-11-20T10:01:30+00:00"}', pd.Timestamp("2026-11-20T10:01:30Z")),
+        ('{"last_refresh_completed_utc": "2026-11-20T11:01:30+01:00"}', pd.Timestamp("2026-11-20T10:01:30Z")),
+        ('{"last_refresh_completed_utc": "2026-11-20T10:01:30"}', pd.Timestamp("2026-11-20T10:01:30Z")),
+        ('{"last_refresh_completed_utc": "soon"}', None),
+        ('{"last_refresh_completed_utc": null}', None),
+        ("{}", None),
+        ("[1, 2]", None),
+        ('{"last_refresh_comp', None),
+    ],
+    ids=["utc", "offset", "naive", "bad-time", "null", "no-key", "not-a-dict", "half-written"],
+)
+def test_load_last_refresh_completed(tmp_path, content, expected):
+    path = tmp_path / "last_refresh.json"
+    path.write_text(content, encoding="utf-8")
+
+    result = queries.load_last_refresh_completed(path)
+
+    assert result == expected
+    if expected is not None:
+        assert str(result.tz) == "UTC"
+
+
+def test_last_refresh_completed_missing_file(tmp_path):
+    assert queries.load_last_refresh_completed(tmp_path / "missing.json") is None
+
+
+def test_last_refresh_completed_defaults_to_config_path(tmp_path, monkeypatch):
+    path = tmp_path / "last_refresh.json"
+    path.write_text('{"last_refresh_completed_utc": "2026-11-20T10:00:00Z"}', encoding="utf-8")
+    monkeypatch.setattr("core.config.LAST_REFRESH_PATH", path)
+
+    assert queries.load_last_refresh_completed() == pd.Timestamp("2026-11-20T10:00:00Z")

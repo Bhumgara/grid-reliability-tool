@@ -10,6 +10,27 @@ def to_utc(df: pd.DataFrame, column: str) -> pd.DataFrame:
     return out
 
 
+def timestamp_utc_or_none(raw) -> pd.Timestamp | None:
+    """
+    Parse one timestamp as UTC (naive times are taken as UTC).
+
+    Returns None if ``raw`` is empty or not a valid time, for fields read from
+    files the refresh worker may be rewriting.
+    """
+    if raw is None or raw == "":
+        return None
+
+    try:
+        ts = pd.Timestamp(raw)
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+    if ts is pd.NaT:
+        return None
+
+    return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+
+
 def series_gw(
     df: pd.DataFrame,
     time_col: str,

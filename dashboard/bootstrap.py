@@ -4,10 +4,15 @@ Streamlit bootstrap for the live refresh worker.
 The daemon refreshes immediately when the app process starts, then checks
 periodically. pipelines.refresh decides whether anything is stale enough to
 fetch, so ordinary Streamlit reruns never trigger API calls directly.
+
+Only one refresher should run against the database. When the standalone
+worker (``python -m backend.worker``) is running, set
+``GRID_DASHBOARD_REFRESH=0`` so the dashboard doesn't start its own thread.
 """
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 
@@ -16,6 +21,18 @@ import streamlit as st
 from core import deployment
 from core.config import DB_PATH, REFRESH_CHECK_SECONDS
 from pipelines.refresh import refresh_live_data
+
+
+# Environment flag for the dashboard's refresh thread. On unless set to one of
+# OFF_VALUES (any case), so the deployed dashboard keeps refreshing by default.
+REFRESH_THREAD_ENV = "GRID_DASHBOARD_REFRESH"
+OFF_VALUES = {"0", "false", "no", "off"}
+
+
+def refresh_thread_enabled() -> bool:
+    """False if ``GRID_DASHBOARD_REFRESH`` turns the dashboard's thread off."""
+    value = os.environ.get(REFRESH_THREAD_ENV, "")
+    return value.strip().lower() not in OFF_VALUES
 
 
 def _secret_bundle_url() -> str | None:
@@ -54,7 +71,18 @@ def _refresh_loop() -> None:
 
 
 @st.cache_resource(show_spinner=False)
-def start_background_worker() -> threading.Thread:
+def start_background_worker() -> threading.Thread | None:
+    """
+    Start the refresh thread once per server process, unless
+    ``GRID_DASHBOARD_REFRESH`` turns it off (returns None then).
+    """
+    if not refresh_thread_enabled():
+        print(
+            "[live-refresh] Dashboard refresh thread off "
+            f"({REFRESH_THREAD_ENV}); expecting backend.worker to refresh."
+        )
+        return None
+
     worker = threading.Thread(
         target=_refresh_loop,
         daemon=True,

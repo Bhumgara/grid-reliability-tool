@@ -2,7 +2,9 @@ import pandas as pd
 import pytest
 
 from core.views.model import (
+    VALIDATION_COLUMNS,
     find_baseline_column,
+    model_metrics_view,
     model_vs_persistence_view,
     validation_view,
 )
@@ -110,3 +112,72 @@ def test_model_vs_persistence_uses_only_complete_rows(predictions):
 
     assert set(view.compare["segment"]) == {"Overall", "Lowest 10% DRM"}
     assert view.compare["mae_gw"].tolist() == pytest.approx([0.3, 0.1, 0.3, 0.1])
+
+
+@pytest.mark.parametrize("column", VALIDATION_COLUMNS)
+def test_validation_view_missing_column_raises_value_error(predictions, column):
+    with pytest.raises(ValueError, match="requires columns"):
+        validation_view(predictions.drop(columns=column))
+
+
+# --- model_metrics_view -------------------------------------------------------
+
+METRICS = {
+    "model": "Ridge Regression",
+    "alpha": 350.0,
+    "forecast_horizon_hours": 24,
+    "test_start": "2026-01-01T00:00:00+00:00",
+    "test_end": "2026-09-21T00:00:00+00:00",
+    "test_rows": 12356,
+    "model_mae_mw": 3400.0,
+    "model_rmse_mw": 4300.0,
+    "baseline_mae_mw": 4100.0,
+    "baseline_rmse_mw": 5300.0,
+    "mae_improvement_pct": 17.5,
+}
+
+
+def test_model_metrics_view():
+    view = model_metrics_view(METRICS)
+
+    assert view.model == "Ridge Regression"
+    assert view.alpha == 350.0
+    assert view.forecast_horizon_hours == 24
+    assert view.model_mae_gw == pytest.approx(3.4)
+    assert view.baseline_mae_gw == pytest.approx(4.1)
+    assert view.mae_improvement_pct == 17.5
+    assert view.model_rmse_gw == pytest.approx(4.3)
+    assert view.baseline_rmse_gw == pytest.approx(5.3)
+    assert view.test_start_utc == pd.Timestamp("2026-01-01T00:00Z")
+    assert view.test_end_utc == pd.Timestamp("2026-09-21T00:00Z")
+    assert view.test_rows == 12356
+
+
+def test_model_metrics_view_optional_fields():
+    view = model_metrics_view({
+        "model_mae_mw": 3400.0,
+        "baseline_mae_mw": 4100.0,
+        "mae_improvement_pct": 17.5,
+        "alpha": "high",
+        "test_end": "later",
+    })
+
+    assert view.model == "Unknown model"
+    assert view.alpha is None
+    assert view.forecast_horizon_hours is None
+    assert view.model_rmse_gw is None
+    assert view.test_end_utc is None
+    assert view.test_rows is None
+
+
+@pytest.mark.parametrize("key", ["model_mae_mw", "baseline_mae_mw", "mae_improvement_pct"])
+@pytest.mark.parametrize("value", ["missing", None, "n/a"])
+def test_model_metrics_view_needs_the_headline_scores(key, value):
+    metrics = dict(METRICS)
+    if value == "missing":
+        del metrics[key]
+    else:
+        metrics[key] = value
+
+    with pytest.raises(ValueError, match="incomplete"):
+        model_metrics_view(metrics)
