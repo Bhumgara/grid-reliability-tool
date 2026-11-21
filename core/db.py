@@ -1,17 +1,17 @@
 """
 Ingestion writes and row counts, used by pipelines.ingest.
 
-Thin wrappers around the storage backend (``core.storage``; SQLite today),
+Thin wrappers around the configured storage backend (``core.storage``),
 kept so the ingestion code reads the same. The SQL lives in
 ``core/storage/sqlite.py``.
 """
 
-from core.storage import SQLiteStore
+from core.storage import GridStore, get_grid_store
 
 
-def _store() -> SQLiteStore:
-    # Reads core.config.DB_PATH on each call.
-    return SQLiteStore()
+def _store() -> GridStore:
+    # The configured backend (GRID_DATABASE_BACKEND), looked up on each call.
+    return get_grid_store()
 
 
 def initialise_database():

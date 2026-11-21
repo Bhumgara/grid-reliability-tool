@@ -21,7 +21,7 @@ from typing import Callable
 
 import pandas as pd
 
-from core.storage import GridStore, SQLiteStore, get_file_store
+from core.storage import GridStore, get_file_store, get_grid_store
 from pipelines.ingest import (
     backfill_fuelhh,
     backfill_indo,
@@ -111,7 +111,7 @@ def source_state(
     (``latest_times`` returns ``(None, None)``).
     """
     now = now if now is not None else utc_now()
-    store = store or SQLiteStore()
+    store = store or get_grid_store()
 
     latest_event, latest_freshness = store.latest_times(spec.table)
 

@@ -117,8 +117,3 @@ class LocalFileStore:
         buffer = io.StringIO()
         frame.to_csv(buffer, index=False)
         self._replace(key, buffer.getvalue())
-
-
-def get_file_store() -> FileStore:
-    """The file store the app uses (local files today)."""
-    return LocalFileStore()

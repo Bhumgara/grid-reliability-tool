@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from core.storage import GridStore, SQLiteStore, get_file_store
+from core.storage import GridStore, get_file_store, get_grid_store
 
 from model.features import (
     add_calendar_features,
@@ -149,8 +149,8 @@ def load_model_inputs(
 
 
 def build_model_dataset(store: GridStore | None = None) -> pd.DataFrame:
-    """Build the modelling dataset; ``store`` defaults to the SQLite database."""
-    store = store or SQLiteStore()
+    """Build the modelling dataset; ``store`` defaults to the configured backend."""
+    store = store or get_grid_store()
     targets, demand, fuel, margin = load_model_inputs(store)
 
     df = targets.copy()

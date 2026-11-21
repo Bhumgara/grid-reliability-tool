@@ -26,6 +26,7 @@ from backend.api.loaders import Loaders
 from backend.api.models import EmptyState, HealthResponse
 from backend.api.routes import demand, forecast, generation, grid, history, model, status
 from core.queries import DatabaseUnavailableError
+from core.storage import check_backends
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,10 @@ def create_app(
     """
     if cors_origins is None:
         cors_origins = cors_origins_from_env()
+
+    # Fail at start-up, not on the first request, if a backend name is wrong.
+    backends = check_backends()
+    logger.info("Storage backends: %s", backends)
 
     app = FastAPI(title="Grid Reliability API")
     app.state.loaders = Loaders(enabled=cache)

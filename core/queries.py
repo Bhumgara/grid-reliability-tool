@@ -23,14 +23,15 @@ from pathlib import Path
 import pandas as pd
 
 from core import config
-from core.storage import LocalFileStore, SQLiteStore, get_file_store
+from core.storage import GridStore, LocalFileStore, SQLiteStore, get_file_store, get_grid_store
 
 # Defined with the storage interface; re-exported here for existing callers.
 from core.storage.base import DatabaseUnavailableError  # noqa: F401
 
 
-def _store(db_path: Path | None) -> SQLiteStore:
-    return SQLiteStore(db_path)
+def _store(db_path: Path | None) -> GridStore:
+    """The configured backend, or the SQLite file at ``db_path`` if given."""
+    return SQLiteStore(db_path) if db_path is not None else get_grid_store()
 
 
 def load_recent_margin(

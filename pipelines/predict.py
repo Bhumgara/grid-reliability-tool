@@ -4,7 +4,7 @@ import joblib
 import pandas as pd
 
 from core import config
-from core.storage import GridStore, SQLiteStore, get_file_store
+from core.storage import GridStore, get_file_store, get_grid_store
 from model.features import (
     add_calendar_features,
     add_drm_lag_features,
@@ -325,7 +325,7 @@ def save_forecast(
 
 
 def run_prediction(store: GridStore | None = None) -> dict:
-    """Predict 24 hours ahead; ``store`` defaults to the SQLite database."""
+    """Predict 24 hours ahead; ``store`` defaults to the configured backend."""
     feature_columns = (
         load_feature_columns()
     )
@@ -333,7 +333,7 @@ def run_prediction(store: GridStore | None = None) -> dict:
     model = load_saved_model()
 
     targets, demand, fuel, margin = load_model_inputs(
-        store or SQLiteStore()
+        store or get_grid_store()
     )
 
     forecast_origin = (

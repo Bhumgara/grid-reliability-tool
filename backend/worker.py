@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from core import config, deployment
-from core.storage import LocalFileStore, get_file_store
+from core.storage import LocalFileStore, UnknownBackendError, check_backends, get_file_store
 
 logger = logging.getLogger("backend.worker")
 
@@ -179,6 +179,12 @@ def main(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    try:
+        logger.info("Storage backends: %s", check_backends())
+    except UnknownBackendError as error:
+        logger.error("%s", error)
+        return 1
 
     if not prepare_data(ensure_data):
         return 1
