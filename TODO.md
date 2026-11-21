@@ -172,7 +172,7 @@ Compute Engine, Cloud Run, on-premise) runs the same thing.
 Needs: 2.2, 2.3. Puts storage behind interfaces so SQLite can later be swapped
 for Postgres, BigQuery or object storage without touching the API or worker.
 
-- [ ] Add a `GridStore` interface in `core/storage/` for the reads in `core/queries.py` and the writes in `pipelines/`
+- [x] Add a `GridStore` interface in `core/storage/` for the reads in `core/queries.py` and the writes in `pipelines/`
 - [ ] Add the SQLite implementation, wrapping the current code, and route `core/queries.py` and `pipelines/` through it
 - [ ] Put the JSON and CSV outputs (forecast, refresh status, validation) behind a file-store interface: a local folder now, object storage (e.g. Cloud Storage) later
 - [ ] Choose the backends with environment variables (default SQLite and the local folder)
