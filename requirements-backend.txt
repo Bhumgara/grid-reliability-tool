@@ -1,0 +1,19 @@
+# Python 3.13
+# What the API and refresh worker need at run time (the container image
+# installs only this). requirements.txt adds the Streamlit dashboard.
+
+# Data handling
+numpy==2.4.6
+pandas==3.0.5
+
+# Data ingestion (Elexon / NESO APIs)
+requests==2.34.2
+
+# Modelling
+joblib==1.5.3
+scikit-learn==1.9.0
+
+# Backend API (FastAPI service for the Flutter client)
+fastapi==0.165.0
+pydantic==2.14.4
+uvicorn==0.54.0
